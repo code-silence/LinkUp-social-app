@@ -1,0 +1,554 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  useWindowDimensions,
+} from 'react-native';
+
+import { Colors, Radius, Spacing } from '../theme';
+import { loginUser, resetPassword } from '../services/auth';
+
+interface LoginScreenProps {
+  onNavigateSignup?: () => void;
+}
+
+export default function LoginScreen({
+  onNavigateSignup,
+}: LoginScreenProps) {
+  const { width } = useWindowDimensions();
+  const isWide = width >= 800;
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState<'error' | 'success'>('error');
+
+  const showMessage = (text: string, type: 'error' | 'success' = 'error') => {
+    setMessage(text);
+    setMessageType(type);
+  };
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      showMessage('Please enter your email and password.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setMessage('');
+
+      await loginUser(email, password);
+
+      showMessage('Welcome back! Redirecting...', 'success');
+    } catch (error: any) {
+      const errorMessages: Record<string, string> = {
+        'auth/invalid-email': 'Please enter a valid email address.',
+        'auth/invalid-credential': 'Incorrect email or password.',
+        'auth/user-disabled': 'This account has been disabled.',
+        'auth/too-many-requests': 'Too many attempts. Try again later.',
+        'auth/network-request-failed': 'Network error. Check your connection.',
+      };
+
+      showMessage(
+        errorMessages[error.code] || 'Something went wrong. Please try again.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      showMessage('Enter your email address first.');
+      return;
+    }
+
+    try {
+      await resetPassword(email);
+      showMessage('Password reset email sent. Check your inbox.', 'success');
+    } catch (error: any) {
+      const errorMessages: Record<string, string> = {
+        'auth/invalid-email': 'Please enter a valid email address.',
+        'auth/user-not-found': 'No account found with this email.',
+        'auth/network-request-failed': 'Network error. Check your connection.',
+      };
+
+      showMessage(
+        errorMessages[error.code] || 'Could not send reset email.',
+      );
+    }
+  };
+
+  return (
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        isWide && styles.desktopContainer,
+      ]}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* BRANDING SECTION */}
+
+      <View
+        style={[
+          styles.brandPanel,
+          isWide ? styles.desktopBrand : styles.mobileBrand,
+        ]}
+      >
+        <View style={styles.decorCircleOne} />
+        <View style={styles.decorCircleTwo} />
+
+        <View style={styles.brandContent}>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoIcon}>L</Text>
+          </View>
+
+          <Text style={styles.brandName}>LinkUp!</Text>
+
+          <Text style={styles.brandTitle}>
+            Your world,{'\n'}closer together.
+          </Text>
+
+          <Text style={styles.brandDescription}>
+            A place to connect, share moments, and build meaningful
+            connections with people who matter.
+          </Text>
+
+          {isWide && (
+            <View style={styles.brandFooter}>
+              <View style={styles.brandDot} />
+              <Text style={styles.brandFooterText}>
+                Connect beyond boundaries.
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* LOGIN SECTION */}
+
+      <View style={styles.formPanel}>
+        <View style={styles.formContent}>
+          <Text style={styles.welcomeLabel}>WELCOME BACK</Text>
+
+          <Text style={styles.heading}>Sign in</Text>
+
+          <Text style={styles.subheading}>
+            Pick up where you left off.
+          </Text>
+
+          {/* EMAIL */}
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Email address</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="you@example.com"
+              placeholderTextColor="#A59BA7"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {/* PASSWORD */}
+
+          <View style={styles.inputGroup}>
+            <View style={styles.passwordHeader}>
+              <Text style={styles.inputLabel}>Password</Text>
+
+              <Pressable onPress={handleForgotPassword}>
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor="#A59BA7"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                onSubmitEditing={handleLogin}
+              />
+
+              <Pressable
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.showButton}
+              >
+                <Text style={styles.showText}>
+                  {showPassword ? 'Hide' : 'Show'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* MESSAGE */}
+
+          {message !== '' && (
+            <Text
+              style={[
+                styles.message,
+                messageType === 'success'
+                  ? styles.successMessage
+                  : styles.errorMessage,
+              ]}
+            >
+              {message}
+            </Text>
+          )}
+
+          {/* LOGIN BUTTON */}
+
+          <Pressable
+            onPress={handleLogin}
+            disabled={loading}
+            style={({ pressed }) => [
+              styles.loginButton,
+              pressed && styles.buttonPressed,
+              loading && styles.buttonDisabled,
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.loginButtonText}>Sign in</Text>
+            )}
+          </Pressable>
+
+          {/* SIGNUP */}
+
+          <View style={styles.signupContainer}>
+            <Text style={styles.signupText}>
+              Don't have an account?
+            </Text>
+
+            <Pressable onPress={onNavigateSignup}>
+              <Text style={styles.signupLink}> Create account</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.bottomText}>
+            Made for connections that matter.
+          </Text>
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    backgroundColor: Colors.background,
+  },
+
+  desktopContainer: {
+    flexDirection: 'row',
+    minHeight: '100%',
+  },
+
+  // BRANDING
+
+  brandPanel: {
+    backgroundColor: Colors.primaryDark,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    padding: 40,
+  },
+
+  desktopBrand: {
+    width: '45%',
+    minHeight: '100%',
+  },
+
+  mobileBrand: {
+    minHeight: 245,
+    paddingHorizontal: 28,
+    paddingVertical: 35,
+  },
+
+  brandContent: {
+    zIndex: 2,
+    maxWidth: 480,
+  },
+
+  logoContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+
+  logoIcon: {
+    fontFamily: 'Lato',
+    fontWeight: '900',
+    fontSize: 30,
+    color: Colors.primaryDark,
+  },
+
+  brandName: {
+    fontFamily: 'Lato',
+    fontWeight: '900',
+    fontSize: 23,
+    color: '#FFFFFF',
+    marginBottom: 35,
+  },
+
+  brandTitle: {
+    fontFamily: 'Lato',
+    fontWeight: '900',
+    fontSize: 42,
+    lineHeight: 49,
+    color: '#FFFFFF',
+    marginBottom: 18,
+  },
+
+  brandDescription: {
+    fontFamily: 'Lato',
+    fontSize: 16,
+    lineHeight: 26,
+    color: '#D8C5E8',
+    maxWidth: 390,
+  },
+
+  brandFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 65,
+  },
+
+  brandDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.accent,
+    marginRight: 10,
+  },
+
+  brandFooterText: {
+    fontFamily: 'Lato',
+    fontSize: 13,
+    color: '#D8C5E8',
+  },
+
+  decorCircleOne: {
+    position: 'absolute',
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    borderWidth: 1,
+    borderColor: 'rgba(216,197,232,0.12)',
+    right: -150,
+    top: -100,
+  },
+
+  decorCircleTwo: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    borderWidth: 1,
+    borderColor: 'rgba(216,197,232,0.12)',
+    right: -100,
+    bottom: -100,
+  },
+
+  // FORM
+
+  formPanel: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 55,
+    backgroundColor: Colors.background,
+  },
+
+  formContent: {
+    width: '100%',
+    maxWidth: 420,
+  },
+
+  welcomeLabel: {
+    fontFamily: 'Lato',
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: 2,
+    color: Colors.secondary,
+    marginBottom: 12,
+  },
+
+  heading: {
+    fontFamily: 'Lato',
+    fontWeight: '900',
+    fontSize: 38,
+    color: Colors.text,
+  },
+
+  subheading: {
+    fontFamily: 'Lato',
+    fontSize: 16,
+    color: Colors.textSecondary,
+    marginTop: 8,
+    marginBottom: 38,
+  },
+
+  inputGroup: {
+    marginBottom: 24,
+  },
+
+  inputLabel: {
+    fontFamily: 'Lato',
+    fontWeight: '700',
+    fontSize: 14,
+    color: Colors.text,
+    marginBottom: 10,
+  },
+
+  input: {
+    height: 54,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.medium,
+    paddingHorizontal: 16,
+    fontFamily: 'Lato',
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: Colors.surface,
+    outlineStyle: 'none',
+  } as any,
+
+  passwordHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  forgotText: {
+    fontFamily: 'Lato',
+    fontWeight: '700',
+    fontSize: 13,
+    color: Colors.primary,
+    marginBottom: 10,
+  },
+
+  passwordContainer: {
+    height: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.medium,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 16,
+  },
+
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    fontFamily: 'Lato',
+    fontSize: 15,
+    color: Colors.text,
+    outlineStyle: 'none',
+  } as any,
+
+  showButton: {
+    paddingLeft: 12,
+    paddingVertical: 8,
+  },
+
+  showText: {
+    fontFamily: 'Lato',
+    fontWeight: '700',
+    fontSize: 13,
+    color: Colors.primary,
+  },
+
+  message: {
+    fontFamily: 'Lato',
+    fontSize: 13,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+
+  errorMessage: {
+    color: Colors.danger,
+  },
+
+  successMessage: {
+    color: Colors.success,
+  },
+
+  // BUTTON
+
+  loginButton: {
+    height: 54,
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.medium,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 5,
+  },
+
+  loginButtonText: {
+    fontFamily: 'Lato',
+    fontWeight: '900',
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+
+  buttonPressed: {
+    opacity: 0.85,
+  },
+
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+
+  // SIGNUP
+
+  signupContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 30,
+  },
+
+  signupText: {
+    fontFamily: 'Lato',
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+
+  signupLink: {
+    fontFamily: 'Lato',
+    fontWeight: '900',
+    fontSize: 14,
+    color: Colors.primary,
+  },
+
+  bottomText: {
+    fontFamily: 'Lato',
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 65,
+  },
+});
