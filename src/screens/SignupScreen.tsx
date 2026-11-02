@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-
+import { useWindowDimensions } from 'react-native';
 import {
     View,
     Text,
@@ -28,6 +28,8 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const { width } = useWindowDimensions();
+    const isDesktop = width >= 800;
 
     const handleSignup = async () => {
         setError('');
@@ -70,10 +72,18 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
 
     return (
         <ScrollView
-            contentContainerStyle={styles.container}
+            contentContainerStyle={[
+                styles.container,
+                isDesktop && styles.desktopContainer,
+            ]}
             keyboardShouldPersistTaps="handled"
         >
-            <View style={styles.brandPanel}>
+            <View
+                style={[
+                    styles.brandPanel,
+                    isDesktop && styles.desktopBrandPanel,
+                ]}
+            >
                 <View style={styles.logoContainer}>
                     <Image
                         source={logo}
@@ -93,7 +103,12 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                 </Text>
             </View>
 
-            <View style={styles.formPanel}>
+            <View
+                style={[
+                    styles.formPanel,
+                    isDesktop && styles.desktopFormPanel,
+                ]}
+            >
                 <View style={styles.formContent}>
                     <Text style={styles.welcomeLabel}>JOIN LINKUP</Text>
 
@@ -148,7 +163,9 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                         <View style={styles.passwordHeader}>
                             <Text style={styles.label}>Confirm password</Text>
 
-                            <Pressable onPress={() => setShowPassword(!showPassword)}>
+                            <Pressable
+                                onPress={() => setShowPassword(!showPassword)}
+                            >
                                 <Text style={styles.showText}>
                                     {showPassword ? 'Hide passwords' : 'Show passwords'}
                                 </Text>
@@ -205,6 +222,7 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
             </View>
         </ScrollView>
     );
+
 }
 
 const styles = StyleSheet.create({
@@ -398,5 +416,22 @@ const styles = StyleSheet.create({
         width: 48,
         height: 48,
         borderRadius: 12,
+    },
+    desktopContainer: {
+        flexDirection: 'row',
+        minHeight: '100%',
+    },
+
+    desktopBrandPanel: {
+        flex: 1,
+        minHeight: '100%',
+        paddingHorizontal: 55,
+    },
+
+    desktopFormPanel: {
+        flex: 1,
+        justifyContent: 'center',
+        paddingHorizontal: 50,
+        paddingVertical: 50,
     },
 });
