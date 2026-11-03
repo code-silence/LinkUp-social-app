@@ -60,16 +60,6 @@ const initialPosts: Post[] = [
         comments: 13,
         liked: true,
     },
-    {
-        id: 3,
-        name: 'Emily Carter',
-        initials: 'EC',
-        time: '3 hours ago',
-        content: 'A little reminder: progress is progress, no matter how small. Keep going!',
-        likes: 18,
-        comments: 4,
-        liked: false,
-    },
 ];
 
 const navigation: { name: Page; icon: string }[] = [
@@ -370,7 +360,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 {[
                     { name: 'Daniel Smith', initials: 'DS' },
                     { name: 'Sophia Lee', initials: 'SL' },
-                    { name: 'James Wilson', initials: 'JW' },
                 ].map(person => (
                     <View key={person.name} style={styles.suggestion}>
                         <Avatar name={person.initials} size={38} />
@@ -442,11 +431,8 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         <NavButton key={item.name} item={item} />
                     ))}
 
-                    <Pressable
-                        onPress={onLogout}
-                        style={styles.sidebarLogout}
-                    >
-                        <Text style={styles.logoutText}>↪ Sign out</Text>
+                    <Pressable onPress={onLogout} style={styles.sidebarLogout}>
+                        <Text style={styles.sidebarLogoutText}>↪ Sign out</Text>
                     </Pressable>
                 </View>
             )}
@@ -1193,6 +1179,11 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.bold,
         fontSize: 9,
         color: Colors.textSecondary,
+    },
+    sidebarLogoutText: {
+        fontFamily: Fonts.bold,
+        fontSize: 13,
+        color: Colors.danger,
     },
 
 });
