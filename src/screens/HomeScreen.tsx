@@ -10,11 +10,10 @@ import {
 } from 'react-native';
 
 import ProfileScreen from './ProfileScreen';
+import FriendsScreen from './FriendsScreen';
 
 import { User } from 'firebase/auth';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
-
-// Import user service to fetch global profile data
 import { getUserProfile, UserProfile } from '../services/user';
 
 interface Props {
@@ -30,7 +29,6 @@ const navigation = [
     { label: 'Profile', icon: '◉' },
 ] as const;
 
-// Avatar component supports image URLs alongside initials
 function Avatar({
     name,
     url,
@@ -82,15 +80,14 @@ function Avatar({
 
 export default function HomeScreen({ user, onLogout }: Props) {
     const { width } = useWindowDimensions();
-    const [activePage, setActivePage] = useState<'Home' | 'Profile'>('Home');
-
-    // Global state to hold the synced user profile across the app
+    
+    const [activePage, setActivePage] = useState<'Home' | 'Profile' | 'Friends'>('Home');
     const [globalProfile, setGlobalProfile] = useState<UserProfile | null>(null);
+    const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
     const isMobile = width < 700;
     const isDesktop = width >= 1100;
 
-    // Fetch the user profile on initial load to sync avatars globally
     useEffect(() => {
         const fetchGlobalProfile = async () => {
             try {
@@ -103,8 +100,8 @@ export default function HomeScreen({ user, onLogout }: Props) {
         fetchGlobalProfile();
     }, [user.uid]);
 
-    // Use global profile data if available, fallback to basic auth data
-    const displayUserName = globalProfile?.name || user.displayName || 'LinkUp User';
+    const emailPrefix = user.email ? user.email.split('@')[0] : 'User';
+    const displayUserName = globalProfile?.name || user.displayName || emailPrefix;
     const displayFirstName = displayUserName.split(' ')[0];
     const displayPhotoURL = globalProfile?.photoURL || user.photoURL || undefined;
 
@@ -114,15 +111,16 @@ export default function HomeScreen({ user, onLogout }: Props) {
     ) => {
         const isActive = activePage === item.label;
         const canNavigate =
-            item.label === 'Home' || item.label === 'Profile';
+            item.label === 'Home' || item.label === 'Profile' || item.label === 'Friends';
 
         return (
             <Pressable
                 key={item.label}
                 disabled={!canNavigate}
                 onPress={() => {
-                    if (item.label === 'Home' || item.label === 'Profile') {
-                        setActivePage(item.label);
+                    if (canNavigate) {
+                        setActivePage(item.label as 'Home' | 'Profile' | 'Friends');
+                        setViewingProfileId(null);
                     }
                 }}
                 style={
@@ -159,7 +157,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
 
     return (
         <View style={styles.app}>
-            {/* Desktop Sidebar */}
             {!isMobile && (
                 <View style={styles.sidebar}>
                     <Text style={styles.brand}>LinkUp</Text>
@@ -202,14 +199,14 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 </View>
             )}
 
-            {/* Main Area */}
             <View style={styles.mainArea}>
-                {/* Top Bar */}
                 <View style={styles.topBar}>
                     {isMobile ? (
                         <Text style={styles.brand}>LinkUp</Text>
                     ) : (
-                        <Text style={styles.topBarTitle}>{activePage}</Text>
+                        <Text style={styles.topBarTitle}>
+                            {viewingProfileId ? "Viewing Profile" : activePage}
+                        </Text>
                     )}
 
                     <View style={styles.topBarRight}>
@@ -232,14 +229,31 @@ export default function HomeScreen({ user, onLogout }: Props) {
                     </View>
                 </View>
 
-                {/* Page Content */}
-                {activePage === 'Profile' ? (
+                {viewingProfileId ? (
+                    <View style={styles.placeholderContainer}>
+                        <Text style={styles.placeholderText}>
+                            Viewing external profile ID: {viewingProfileId}
+                        </Text>
+                        <Pressable 
+                            style={styles.backButton} 
+                            onPress={() => setViewingProfileId(null)}
+                        >
+                            <Text style={styles.backButtonText}>Go Back to Friends</Text>
+                        </Pressable>
+                    </View>
+                ) : activePage === 'Profile' ? (
                     <ProfileScreen
                         user={user}
-                        // Callback to update the parent state instantly upon save
                         onProfileUpdate={updatedProfile =>
                             setGlobalProfile(updatedProfile)
                         }
+                    />
+                ) : activePage === 'Friends' ? (
+                    <FriendsScreen 
+                        user={user}
+                        onViewProfile={(userId) => {
+                            setViewingProfileId(userId);
+                        }}
                     />
                 ) : (
                     <ScrollView
@@ -253,7 +267,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                 !isDesktop && styles.contentLayoutCompact,
                             ]}
                         >
-                            {/* Main Feed Area */}
                             <View style={styles.feedColumn}>
                                 <View style={styles.welcomeSection}>
                                     <Text style={styles.welcomeEyebrow}>
@@ -269,7 +282,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                     </Text>
                                 </View>
 
-                                {/* Feed Empty State */}
                                 <View style={styles.feedCard}>
                                     <View style={styles.feedCardHeader}>
                                         <Text style={styles.feedTitle}>
@@ -300,7 +312,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                 </View>
                             </View>
 
-                            {/* Right Sidebar */}
                             {isDesktop && (
                                 <View style={styles.rightSidebar}>
                                     <View style={styles.accountCard}>
@@ -346,7 +357,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
                     </ScrollView>
                 )}
 
-                {/* Mobile Bottom Navigation */}
                 {isMobile && (
                     <View style={styles.bottomNavigation}>
                         {navigation
@@ -699,5 +709,27 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.bold,
         fontSize: 10,
         color: Colors.textSecondary,
+    },
+    placeholderContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    placeholderText: {
+        fontFamily: Fonts.bold,
+        fontSize: 18,
+        color: Colors.text,
+        marginBottom: Spacing.lg,
+    },
+    backButton: {
+        backgroundColor: Colors.primary,
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.md,
+        borderRadius: Radius.medium,
+    },
+    backButtonText: {
+        fontFamily: Fonts.bold,
+        color: Colors.surface,
+        fontSize: 14,
     },
 });
