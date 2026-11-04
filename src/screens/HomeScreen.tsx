@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -6,12 +6,16 @@ import {
     ScrollView,
     StyleSheet,
     useWindowDimensions,
+    Image,
 } from 'react-native';
 
 import ProfileScreen from './ProfileScreen';
 
 import { User } from 'firebase/auth';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
+
+// Import user service to fetch global profile data
+import { getUserProfile, UserProfile } from '../services/user';
 
 interface Props {
     user: User;
@@ -26,11 +30,14 @@ const navigation = [
     { label: 'Profile', icon: '◉' },
 ] as const;
 
+// Avatar component supports image URLs alongside initials
 function Avatar({
     name,
+    url,
     size = 42,
 }: {
     name: string;
+    url?: string;
     size?: number;
 }) {
     const initials = name
@@ -53,7 +60,22 @@ function Avatar({
                 },
             ]}
         >
-            <Text style={styles.avatarText}>{initials || 'U'}</Text>
+            {url ? (
+                <Image
+                    source={{ uri: url }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                />
+            ) : (
+                <Text
+                    style={[
+                        styles.avatarText,
+                        { fontSize: Math.max(14, size * 0.35) },
+                    ]}
+                >
+                    {initials || 'U'}
+                </Text>
+            )}
         </View>
     );
 }
@@ -62,11 +84,29 @@ export default function HomeScreen({ user, onLogout }: Props) {
     const { width } = useWindowDimensions();
     const [activePage, setActivePage] = useState<'Home' | 'Profile'>('Home');
 
+    // Global state to hold the synced user profile across the app
+    const [globalProfile, setGlobalProfile] = useState<UserProfile | null>(null);
+
     const isMobile = width < 700;
     const isDesktop = width >= 1100;
 
-    const userName = user.displayName || 'LinkUp User';
-    const firstName = userName.split(' ')[0];
+    // Fetch the user profile on initial load to sync avatars globally
+    useEffect(() => {
+        const fetchGlobalProfile = async () => {
+            try {
+                const data = await getUserProfile(user.uid);
+                setGlobalProfile(data as UserProfile);
+            } catch (error) {
+                console.error('Error fetching global profile:', error);
+            }
+        };
+        fetchGlobalProfile();
+    }, [user.uid]);
+
+    // Use global profile data if available, fallback to basic auth data
+    const displayUserName = globalProfile?.name || user.displayName || 'LinkUp User';
+    const displayFirstName = displayUserName.split(' ')[0];
+    const displayPhotoURL = globalProfile?.photoURL || user.photoURL || undefined;
 
     const renderNavigationItem = (
         item: (typeof navigation)[number],
@@ -125,11 +165,15 @@ export default function HomeScreen({ user, onLogout }: Props) {
                     <Text style={styles.brand}>LinkUp</Text>
 
                     <View style={styles.account}>
-                        <Avatar name={userName} size={46} />
+                        <Avatar
+                            name={displayUserName}
+                            url={displayPhotoURL}
+                            size={46}
+                        />
 
                         <View style={styles.accountInfo}>
                             <Text style={styles.accountName} numberOfLines={1}>
-                                {userName}
+                                {displayUserName}
                             </Text>
 
                             <Text style={styles.accountEmail} numberOfLines={1}>
@@ -180,13 +224,23 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             </Pressable>
                         )}
 
-                        <Avatar name={userName} size={40} />
+                        <Avatar
+                            name={displayUserName}
+                            url={displayPhotoURL}
+                            size={40}
+                        />
                     </View>
                 </View>
 
                 {/* Page Content */}
                 {activePage === 'Profile' ? (
-                    <ProfileScreen user={user} />
+                    <ProfileScreen
+                        user={user}
+                        // Callback to update the parent state instantly upon save
+                        onProfileUpdate={updatedProfile =>
+                            setGlobalProfile(updatedProfile)
+                        }
+                    />
                 ) : (
                     <ScrollView
                         style={styles.contentScroll}
@@ -207,7 +261,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                     </Text>
 
                                     <Text style={styles.welcomeTitle}>
-                                        Hey, {firstName}!
+                                        Hey, {displayFirstName}!
                                     </Text>
 
                                     <Text style={styles.welcomeSubtitle}>
@@ -255,14 +309,18 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                         </Text>
 
                                         <View style={styles.accountCardProfile}>
-                                            <Avatar name={userName} size={54} />
+                                            <Avatar
+                                                name={displayUserName}
+                                                url={displayPhotoURL}
+                                                size={54}
+                                            />
 
                                             <View style={styles.accountCardInfo}>
                                                 <Text
                                                     style={styles.accountCardName}
                                                     numberOfLines={1}
                                                 >
-                                                    {userName}
+                                                    {displayUserName}
                                                 </Text>
 
                                                 <Text
@@ -284,9 +342,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             )}
                         </View>
 
-                        <Text style={styles.footer}>
-                            LinkUp · © 2026
-                        </Text>
+                        <Text style={styles.footer}>LinkUp · © 2026</Text>
                     </ScrollView>
                 )}
 
@@ -310,9 +366,6 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.background,
         minHeight: '100%',
     },
-
-    // Sidebar
-
     sidebar: {
         width: 250,
         backgroundColor: Colors.surface,
@@ -322,13 +375,11 @@ const styles = StyleSheet.create({
         paddingTop: Spacing.xl,
         paddingBottom: Spacing.lg,
     },
-
     brand: {
         fontFamily: Fonts.black,
         fontSize: 27,
         color: Colors.primary,
     },
-
     account: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -338,38 +389,37 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: Colors.border,
     },
-
     accountInfo: {
         flex: 1,
         minWidth: 0,
     },
-
     accountName: {
         fontFamily: Fonts.bold,
         fontSize: 14,
         color: Colors.text,
     },
-
     accountEmail: {
         fontFamily: Fonts.regular,
         fontSize: 11,
         color: Colors.textSecondary,
         marginTop: 4,
     },
-
     avatar: {
         backgroundColor: Colors.accent,
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
+        overflow: 'hidden',
     },
-
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+    },
     avatarText: {
         fontFamily: Fonts.black,
         fontSize: 14,
         color: Colors.primaryDark,
     },
-
     menuHeading: {
         fontFamily: Fonts.bold,
         fontSize: 11,
@@ -378,11 +428,9 @@ const styles = StyleSheet.create({
         marginTop: 28,
         marginBottom: 14,
     },
-
     navigation: {
         gap: 5,
     },
-
     navItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -391,11 +439,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         borderRadius: Radius.medium,
     },
-
     navItemActive: {
         backgroundColor: Colors.accent,
     },
-
     navIcon: {
         fontFamily: Fonts.bold,
         fontSize: 21,
@@ -403,52 +449,41 @@ const styles = StyleSheet.create({
         width: 25,
         textAlign: 'center',
     },
-
     navLabel: {
         fontFamily: Fonts.bold,
         fontSize: 14,
         color: Colors.textSecondary,
     },
-
     navTextActive: {
         color: Colors.primary,
     },
-
     sidebarBottom: {
         marginTop: 'auto',
     },
-
     sidebarDivider: {
         height: 1,
         backgroundColor: Colors.border,
         marginBottom: 15,
     },
-
     logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
         padding: 12,
     },
-
     logoutIcon: {
         fontSize: 20,
         color: Colors.danger,
     },
-
     logoutText: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.danger,
     },
-
-    // Main Area
-
     mainArea: {
         flex: 1,
         minWidth: 0,
     },
-
     topBar: {
         height: 72,
         backgroundColor: Colors.surface,
@@ -459,42 +494,35 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
-
     topBarTitle: {
         fontFamily: Fonts.bold,
         fontSize: 17,
         color: Colors.text,
     },
-
     topBarRight: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 15,
     },
-
     mobileLogout: {
         paddingHorizontal: 13,
         paddingVertical: 9,
         borderRadius: Radius.medium,
         backgroundColor: Colors.background,
     },
-
     mobileLogoutText: {
         fontFamily: Fonts.bold,
         fontSize: 12,
         color: Colors.danger,
     },
-
     contentScroll: {
         flex: 1,
     },
-
     content: {
         padding: Spacing.lg,
         paddingBottom: Spacing.xl,
         alignItems: 'center',
     },
-
     contentLayout: {
         width: '100%',
         maxWidth: 1120,
@@ -502,23 +530,17 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
         gap: Spacing.lg,
     },
-
     contentLayoutCompact: {
         maxWidth: 720,
     },
-
-    // Feed
-
     feedColumn: {
         flex: 1,
         minWidth: 0,
     },
-
     welcomeSection: {
         paddingTop: 12,
         paddingBottom: 27,
     },
-
     welcomeEyebrow: {
         fontFamily: Fonts.bold,
         fontSize: 11,
@@ -526,13 +548,11 @@ const styles = StyleSheet.create({
         color: Colors.primary,
         marginBottom: 10,
     },
-
     welcomeTitle: {
         fontFamily: Fonts.black,
         fontSize: 30,
         color: Colors.text,
     },
-
     welcomeSubtitle: {
         fontFamily: Fonts.regular,
         fontSize: 14,
@@ -540,7 +560,6 @@ const styles = StyleSheet.create({
         marginTop: 7,
         lineHeight: 21,
     },
-
     feedCard: {
         backgroundColor: Colors.surface,
         borderRadius: Radius.large,
@@ -548,33 +567,28 @@ const styles = StyleSheet.create({
         borderColor: Colors.border,
         overflow: 'hidden',
     },
-
     feedCardHeader: {
         padding: 20,
         borderBottomWidth: 1,
         borderBottomColor: Colors.border,
     },
-
     feedTitle: {
         fontFamily: Fonts.black,
         fontSize: 18,
         color: Colors.text,
     },
-
     feedSubtitle: {
         fontFamily: Fonts.regular,
         fontSize: 12,
         color: Colors.textSecondary,
         marginTop: 5,
     },
-
     emptyFeed: {
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 25,
         paddingVertical: 65,
     },
-
     emptyIcon: {
         width: 64,
         height: 64,
@@ -584,18 +598,15 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: 18,
     },
-
     emptyIconText: {
         fontSize: 34,
         color: Colors.primary,
     },
-
     emptyTitle: {
         fontFamily: Fonts.bold,
         fontSize: 16,
         color: Colors.text,
     },
-
     emptyDescription: {
         fontFamily: Fonts.regular,
         fontSize: 13,
@@ -605,14 +616,10 @@ const styles = StyleSheet.create({
         marginTop: 8,
         maxWidth: 300,
     },
-
-    // Right Sidebar
-
     rightSidebar: {
         width: 270,
         paddingTop: 12,
     },
-
     accountCard: {
         backgroundColor: Colors.surface,
         borderWidth: 1,
@@ -620,7 +627,6 @@ const styles = StyleSheet.create({
         borderRadius: Radius.large,
         padding: 19,
     },
-
     cardHeading: {
         fontFamily: Fonts.bold,
         fontSize: 11,
@@ -628,44 +634,37 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         marginBottom: 20,
     },
-
     accountCardProfile: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
     },
-
     accountCardInfo: {
         flex: 1,
         minWidth: 0,
     },
-
     accountCardName: {
         fontFamily: Fonts.bold,
         fontSize: 14,
         color: Colors.text,
     },
-
     accountCardEmail: {
         fontFamily: Fonts.regular,
         fontSize: 11,
         color: Colors.textSecondary,
         marginTop: 5,
     },
-
     cardDivider: {
         height: 1,
         backgroundColor: Colors.border,
         marginVertical: 18,
     },
-
     accountCardFooter: {
         fontFamily: Fonts.regular,
         fontSize: 12,
         lineHeight: 19,
         color: Colors.textSecondary,
     },
-
     footer: {
         width: '100%',
         maxWidth: 1120,
@@ -675,9 +674,6 @@ const styles = StyleSheet.create({
         marginTop: 35,
         textAlign: 'center',
     },
-
-    // Mobile Navigation
-
     bottomNavigation: {
         height: 66,
         flexDirection: 'row',
@@ -688,20 +684,17 @@ const styles = StyleSheet.create({
         borderTopColor: Colors.border,
         paddingHorizontal: 4,
     },
-
     mobileNavItem: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         gap: 3,
     },
-
     mobileNavIcon: {
         fontFamily: Fonts.bold,
         fontSize: 21,
         color: Colors.textSecondary,
     },
-
     mobileNavLabel: {
         fontFamily: Fonts.bold,
         fontSize: 10,
