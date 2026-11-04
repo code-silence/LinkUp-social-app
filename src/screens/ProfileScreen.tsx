@@ -285,6 +285,9 @@ export default function ProfileScreen({ user }: Props) {
     const [notice, setNotice] = useState('');
     const [error, setError] = useState('');
 
+    const [interestsInput, setInterestsInput] = useState('');
+    const [languagesInput, setLanguagesInput] = useState('');
+
     const loadProfile = useCallback(async () => {
         setLoading(true);
         setError('');
@@ -357,6 +360,8 @@ export default function ProfileScreen({ user }: Props) {
 
         setNotice('');
         setError('');
+        setInterestsInput(profile.interests.join(', '));
+        setLanguagesInput(profile.languages.join(', '));
         setEditVisible(true);
     };
 
@@ -436,12 +441,16 @@ export default function ProfileScreen({ user }: Props) {
                 ...editForm,
                 name: editForm.name.trim(),
                 username: editForm.username?.trim() || '',
-                interests: Array.isArray(editForm.interests)
-                    ? editForm.interests
-                    : [],
-                languages: Array.isArray(editForm.languages)
-                    ? editForm.languages
-                    : [],
+
+                interests: interestsInput
+                    .split(',')
+                    .map(item => item.trim())
+                    .filter(Boolean),
+
+                languages: languagesInput
+                    .split(',')
+                    .map(item => item.trim())
+                    .filter(Boolean),
             };
 
             await updateUserProfile(user.uid, updatedData);
@@ -1029,59 +1038,32 @@ export default function ProfileScreen({ user }: Props) {
                             ))}
 
                             {/* Interests and Languages */}
+                            {/* Interests and Languages */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formSectionTitle}>
                                     More about you
                                 </Text>
 
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.inputLabel}>
-                                        Interests
-                                    </Text>
+                                    <Text style={styles.inputLabel}>Interests</Text>
 
                                     <TextInput
-                                        value={(
-                                            editForm.interests || []
-                                        ).join(', ')}
-                                        onChangeText={value =>
-                                            setEditForm(previous => ({
-                                                ...previous,
-                                                interests: value
-                                                    .split(',')
-                                                    .map(item => item.trim())
-                                                    .filter(Boolean),
-                                            }))
-                                        }
-                                        placeholder="Coding, music, gaming"
-                                        placeholderTextColor={
-                                            Colors.textSecondary
-                                        }
+                                        value={interestsInput}
+                                        onChangeText={setInterestsInput}
+                                        placeholder="Coding, Music, Gaming"
+                                        placeholderTextColor={Colors.textSecondary}
                                         style={styles.textInput}
                                     />
                                 </View>
 
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.inputLabel}>
-                                        Languages
-                                    </Text>
+                                    <Text style={styles.inputLabel}>Languages</Text>
 
                                     <TextInput
-                                        value={(
-                                            editForm.languages || []
-                                        ).join(', ')}
-                                        onChangeText={value =>
-                                            setEditForm(previous => ({
-                                                ...previous,
-                                                languages: value
-                                                    .split(',')
-                                                    .map(item => item.trim())
-                                                    .filter(Boolean),
-                                            }))
-                                        }
-                                        placeholder="English, Bengali"
-                                        placeholderTextColor={
-                                            Colors.textSecondary
-                                        }
+                                        value={languagesInput}
+                                        onChangeText={setLanguagesInput}
+                                        placeholder="English, Bengali, Hindi"
+                                        placeholderTextColor={Colors.textSecondary}
                                         style={styles.textInput}
                                     />
                                 </View>
