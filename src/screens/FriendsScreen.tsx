@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
@@ -229,63 +228,55 @@ export default function FriendsScreen({
         });
     }, [currentList, searchQuery]);
 
-    const renderAvatar = (profile: UserProfile) => {
+    const renderAvatar = (profile: UserProfile, size = 50) => {
         const name = getDisplayName(profile);
 
         if (profile.photoURL) {
             return (
                 <Image
                     source={{ uri: profile.photoURL }}
-                    style={styles.cardAvatarImage}
+                    style={{ width: size, height: size, borderRadius: size / 2 }}
                 />
             );
         }
 
         return (
-            <View style={styles.cardAvatarPlaceholder}>
-                <Text style={styles.cardAvatarText}>
+            <View style={[styles.cardAvatarPlaceholder, { width: size, height: size, borderRadius: size / 2 }]}>
+                <Text style={[styles.cardAvatarText, { fontSize: size * 0.38 }]}>
                     {name.substring(0, 2).toUpperCase()}
                 </Text>
             </View>
         );
     };
 
-    const renderActions = (profile: UserProfile) => {
+    // Render list item specifically for "Your Friends" tab
+    const renderFriendListItem = (profile: UserProfile) => {
         const isProcessing = actionLoading === profile.uid;
+        const displayName = getDisplayName(profile);
 
-        if (activeTab === 'Suggestions') {
-            return (
+        return (
+            <View key={profile.uid} style={styles.listItem}>
                 <Pressable
-                    style={[
-                        styles.primaryButton,
-                        isProcessing && styles.buttonDisabled,
-                    ]}
-                    onPress={() => handleAddFriend(profile)}
-                    disabled={isProcessing}
+                    style={styles.listLeft}
+                    onPress={() => onViewProfile(profile.uid)}
                 >
-                    <Text style={styles.primaryButtonText}>
-                        {isProcessing ? 'Sending...' : 'Add friend'}
-                    </Text>
-                </Pressable>
-            );
-        }
-
-        if (activeTab === 'Friend Requests') {
-            return (
-                <View style={styles.actionGroup}>
-                    <Pressable
-                        style={[
-                            styles.primaryButton,
-                            isProcessing && styles.buttonDisabled,
-                        ]}
-                        onPress={() => handleAccept(profile)}
-                        disabled={isProcessing}
-                    >
-                        <Text style={styles.primaryButtonText}>
-                            {isProcessing ? 'Accepting...' : 'Accept'}
+                    {renderAvatar(profile, 56)}
+                    <View style={styles.listTextContainer}>
+                        <Text style={styles.listName} numberOfLines={1}>
+                            {displayName}
                         </Text>
-                    </Pressable>
+                        {profile.username ? (
+                            <Text style={styles.listUsername} numberOfLines={1}>
+                                @{profile.username}
+                            </Text>
+                        ) : null}
+                        <Text style={styles.listMeta}>
+                            {profile.friendsCount || 0} friends
+                        </Text>
+                    </View>
+                </Pressable>
 
+                <View style={styles.listActions}>
                     <Pressable
                         style={[
                             styles.secondaryButton,
@@ -294,62 +285,28 @@ export default function FriendsScreen({
                         onPress={() =>
                             handleRemoveConnection(
                                 profile,
-                                'Friend request declined.',
+                                `You are no longer friends with ${displayName}.`,
                             )
                         }
                         disabled={isProcessing}
                     >
-                        <Text style={styles.secondaryButtonText}>Decline</Text>
+                        <Text style={styles.secondaryButtonText}>
+                            {isProcessing ? 'Removing...' : 'Unfriend'}
+                        </Text>
                     </Pressable>
                 </View>
-            );
-        }
-
-        if (activeTab === 'Sent Requests') {
-            return (
-                <Pressable
-                    style={[
-                        styles.secondaryButton,
-                        isProcessing && styles.buttonDisabled,
-                    ]}
-                    onPress={() =>
-                        handleRemoveConnection(
-                            profile,
-                            'Friend request cancelled.',
-                        )
-                    }
-                    disabled={isProcessing}
-                >
-                    <Text style={styles.secondaryButtonText}>
-                        {isProcessing ? 'Cancelling...' : 'Cancel request'}
-                    </Text>
-                </Pressable>
-            );
-        }
-
-        return (
-            <Pressable
-                style={[
-                    styles.secondaryButton,
-                    isProcessing && styles.buttonDisabled,
-                ]}
-                onPress={() =>
-                    handleRemoveConnection(
-                        profile,
-                        `You are no longer friends with ${getDisplayName(profile)}.`,
-                    )
-                }
-                disabled={isProcessing}
-            >
-                <Text style={styles.secondaryButtonText}>
-                    {isProcessing ? 'Removing...' : 'Unfriend'}
-                </Text>
-            </Pressable>
+            </View>
         );
     };
 
     const renderCard = (profile: UserProfile) => {
+        // If active tab is "Your Friends", use the clean list layout
+        if (activeTab === 'Your Friends') {
+            return renderFriendListItem(profile);
+        }
+
         const displayName = getDisplayName(profile);
+        const isProcessing = actionLoading === profile.uid;
 
         return (
             <View
@@ -371,7 +328,7 @@ export default function FriendsScreen({
                     )}
 
                     <View style={styles.cardAvatarWrapper}>
-                        {renderAvatar(profile)}
+                        {renderAvatar(profile, 80)}
                     </View>
                 </Pressable>
 
@@ -389,17 +346,81 @@ export default function FriendsScreen({
                     ) : null}
 
                     <Text style={styles.cardMeta}>
-                        {activeTab === 'Your Friends'
-                            ? `${profile.friendsCount || 0} friends`
-                            : activeTab === 'Friend Requests'
-                              ? 'Wants to connect with you'
-                              : activeTab === 'Sent Requests'
-                                ? 'Request pending'
-                                : 'Suggested for you'}
+                        {activeTab === 'Friend Requests'
+                            ? 'Wants to connect with you'
+                            : activeTab === 'Sent Requests'
+                              ? 'Request pending'
+                              : 'Suggested for you'}
                     </Text>
 
                     <View style={styles.cardActions}>
-                        {renderActions(profile)}
+                        {activeTab === 'Suggestions' && (
+                            <Pressable
+                                style={[
+                                    styles.primaryButton,
+                                    isProcessing && styles.buttonDisabled,
+                                ]}
+                                onPress={() => handleAddFriend(profile)}
+                                disabled={isProcessing}
+                            >
+                                <Text style={styles.primaryButtonText}>
+                                    {isProcessing ? 'Sending...' : 'Add friend'}
+                                </Text>
+                            </Pressable>
+                        )}
+
+                        {activeTab === 'Friend Requests' && (
+                            <View style={styles.actionGroup}>
+                                <Pressable
+                                    style={[
+                                        styles.primaryButton,
+                                        isProcessing && styles.buttonDisabled,
+                                    ]}
+                                    onPress={() => handleAccept(profile)}
+                                    disabled={isProcessing}
+                                >
+                                    <Text style={styles.primaryButtonText}>
+                                        {isProcessing ? 'Accepting...' : 'Accept'}
+                                    </Text>
+                                </Pressable>
+
+                                <Pressable
+                                    style={[
+                                        styles.secondaryButton,
+                                        isProcessing && styles.buttonDisabled,
+                                    ]}
+                                    onPress={() =>
+                                        handleRemoveConnection(
+                                            profile,
+                                            'Friend request declined.',
+                                        )
+                                    }
+                                    disabled={isProcessing}
+                                >
+                                    <Text style={styles.secondaryButtonText}>Decline</Text>
+                                </Pressable>
+                            </View>
+                        )}
+
+                        {activeTab === 'Sent Requests' && (
+                            <Pressable
+                                style={[
+                                    styles.secondaryButton,
+                                    isProcessing && styles.buttonDisabled,
+                                ]}
+                                onPress={() =>
+                                    handleRemoveConnection(
+                                        profile,
+                                        'Friend request cancelled.',
+                                    )
+                                }
+                                disabled={isProcessing}
+                            >
+                                <Text style={styles.secondaryButtonText}>
+                                    {isProcessing ? 'Cancelling...' : 'Cancel request'}
+                                </Text>
+                            </Pressable>
+                        )}
                     </View>
                 </View>
             </View>
@@ -504,7 +525,13 @@ export default function FriendsScreen({
                         </Text>
                     </View>
                 ) : displayedUsers.length > 0 ? (
-                    <View style={styles.grid}>
+                    <View
+                        style={
+                            activeTab === 'Your Friends'
+                                ? styles.listContainer
+                                : styles.grid
+                        }
+                    >
                         {displayedUsers.map(renderCard)}
                     </View>
                 ) : (
@@ -652,6 +679,52 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         gap: Spacing.md,
         alignItems: 'flex-start',
+    },
+    listContainer: {
+        flexDirection: 'column',
+        gap: Spacing.md,
+        maxWidth: 750,
+    },
+    listItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.large,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        padding: Spacing.md,
+    },
+    listLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.md,
+        flex: 1,
+    },
+    listTextContainer: {
+        flex: 1,
+    },
+    listName: {
+        fontFamily: Fonts.bold,
+        fontSize: 15,
+        color: Colors.text,
+    },
+    listUsername: {
+        fontFamily: Fonts.regular,
+        fontSize: 12,
+        color: Colors.primary,
+        marginTop: 2,
+    },
+    listMeta: {
+        fontFamily: Fonts.regular,
+        fontSize: 12,
+        color: Colors.textSecondary,
+        marginTop: 3,
+    },
+    listActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.sm,
     },
     card: {
         backgroundColor: Colors.surface,
