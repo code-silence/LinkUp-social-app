@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -32,7 +32,22 @@ export default function CreatePostScreen({
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [posting, setPosting] = useState(false);
+    const [profile, setProfile] = useState<Awaited<ReturnType<typeof getUserProfile>>>(null);
+    useEffect(() => {
+        let mounted = true;
 
+        getUserProfile(user.uid)
+            .then(data => {
+                if (mounted) setProfile(data);
+            })
+            .catch(error => {
+                console.error('Could not load profile:', error);
+            });
+
+        return () => {
+            mounted = false;
+        };
+    }, [user.uid]);
     const showMessage = (title: string, message: string) => {
         if (Platform.OS === 'web') {
             window.alert(`${title}\n\n${message}`);
@@ -178,14 +193,21 @@ export default function CreatePostScreen({
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
                     <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>
-                            {(user.displayName || user.email || 'U')[0].toUpperCase()}
-                        </Text>
+                        {profile?.photoURL ? (
+                            <Image
+                                source={{ uri: profile.photoURL }}
+                                style={styles.avatarImage}
+                            />
+                        ) : (
+                            <Text style={styles.avatarText}>
+                                {(profile?.name || user.displayName || user.email || 'U')[0].toUpperCase()}
+                            </Text>
+                        )}
                     </View>
 
                     <View style={styles.authorInfo}>
                         <Text style={styles.authorName}>
-                            {user.displayName || 'Your profile'}
+                            {profile?.name || user.displayName || 'Your profile'}
                         </Text>
                         <Text style={styles.visibility}>
                             Public post
@@ -248,7 +270,7 @@ export default function CreatePostScreen({
                     style={[
                         styles.postButton,
                         (posting || (!caption.trim() && !imageFile)) &&
-                            styles.postButtonDisabled,
+                        styles.postButtonDisabled,
                     ]}
                 >
                     {posting ? (
@@ -457,5 +479,10 @@ const styles = StyleSheet.create({
         lineHeight: 19,
         color: Colors.primaryDark,
         marginTop: 6,
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: Radius.round,
     },
 });

@@ -11,6 +11,7 @@ import {
     runTransaction,
     serverTimestamp,
     setDoc,
+    getDoc,
     where,
 } from 'firebase/firestore';
 
@@ -55,6 +56,7 @@ export interface PostComment {
 export interface PostReaction {
     uid: string;
     type: ReactionType;
+    author?: PostAuthor;
     createdAt?: unknown;
     updatedAt?: unknown;
 }
@@ -218,6 +220,7 @@ export const setPostReaction = async (
         transaction.set(reactionRef, {
             uid: actor.uid,
             type: reaction,
+            author: actor,
             createdAt: existingReaction?.createdAt || serverTimestamp(),
             updatedAt: serverTimestamp(),
         });
@@ -360,4 +363,74 @@ export const subscribeToPostComments = (
         },
         error => onError?.(error),
     );
+};
+
+export interface PostReactionWithAuthor {
+    uid: string;
+    type: ReactionType;
+    author: PostAuthor;
+}
+
+export const subscribeToPostReactions = (
+    postId: string,
+    callback: (reactions: PostReactionWithAuthor[]) => void,
+    onError?: (error: Error) => void,
+) => {
+    let active = true;
+
+    const reactionsQuery = query(
+        collection(db, 'posts', postId, 'reactions'),
+        orderBy('createdAt', 'asc'),
+    );
+
+    const unsubscribe = onSnapshot(
+        reactionsQuery,
+        async snapshot => {
+            try {
+                const reactions = await Promise.all(
+                    snapshot.docs.map(async item => {
+                        const data = item.data() as PostReaction;
+
+                        let author = data.author;
+
+                        // Support reactions created before author snapshots.
+                        if (!author) {
+                            const userSnapshot = await getDoc(
+                                doc(db, 'users', data.uid),
+                            );
+
+                            const profile = userSnapshot.exists()
+                                ? userSnapshot.data()
+                                : {};
+
+                            author = {
+                                uid: data.uid,
+                                name: profile.name || 'LinkUp User',
+                                username: profile.username || '',
+                                photoURL: profile.photoURL || '',
+                            };
+                        }
+
+                        return {
+                            uid: data.uid,
+                            type: data.type,
+                            author,
+                        };
+                    }),
+                );
+
+                if (active) callback(reactions);
+            } catch (error) {
+                if (active) onError?.(error as Error);
+            }
+        },
+        error => {
+            if (active) onError?.(error);
+        },
+    );
+
+    return () => {
+        active = false;
+        unsubscribe();
+    };
 };

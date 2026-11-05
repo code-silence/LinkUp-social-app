@@ -18,9 +18,11 @@ import {
     Post,
     PostAuthor,
     PostComment,
+    PostReactionWithAuthor,
     ReactionType,
     setPostReaction,
     subscribeToPostComments,
+    subscribeToPostReactions,
     subscribeToUserReaction,
 } from '../services/posts';
 
@@ -35,12 +37,12 @@ const reactions: {
     label: string;
     symbol: string;
 }[] = [
-    { type: 'love', label: 'Love', symbol: '💖' },
-    { type: 'haha', label: 'Haha', symbol: '😂' },
-    { type: 'angry', label: 'Angry', symbol: '😡' },
-    { type: 'clap', label: 'Clap', symbol: '👏' },
-    { type: 'sad', label: 'Sad', symbol: '😢' },
-];
+        { type: 'love', label: 'Love', symbol: '💖' },
+        { type: 'haha', label: 'Haha', symbol: '😂' },
+        { type: 'angry', label: 'Angry', symbol: '😡' },
+        { type: 'clap', label: 'Clap', symbol: '👏' },
+        { type: 'sad', label: 'Sad', symbol: '😢' },
+    ];
 
 const showMessage = (message: string) => {
     if (typeof window !== 'undefined') {
@@ -128,6 +130,10 @@ export default function PostCard({
     const [imageScale, setImageScale] = useState(1);
     const [imageRatio, setImageRatio] = useState(1);
 
+    const [showReactions, setShowReactions] = useState(false);
+    const [postReactions, setPostReactions] = useState<PostReactionWithAuthor[]>([]);
+    const [reactionsLoading, setReactionsLoading] = useState(false);
+
     useEffect(() => {
         return subscribeToUserReaction(
             post.id,
@@ -145,6 +151,24 @@ export default function PostCard({
             error => console.error('Comment subscription error:', error),
         );
     }, [post.id, showComments]);
+
+    useEffect(() => {
+        if (!showReactions) return;
+
+        setReactionsLoading(true);
+
+        return subscribeToPostReactions(
+            post.id,
+            reactions => {
+                setPostReactions(reactions);
+                setReactionsLoading(false);
+            },
+            error => {
+                console.error('Reaction subscription error:', error);
+                setReactionsLoading(false);
+            },
+        );
+    }, [post.id, showReactions]);
 
     const handleReaction = async (type: ReactionType) => {
         if (submittingReaction) return;
@@ -271,9 +295,19 @@ export default function PostCard({
 
             {/* Reaction and comment counts */}
             <View style={styles.countRow}>
-                <Text style={styles.countText}>
-                    {totalReactions} reactions
-                </Text>
+                <Pressable
+                    onPress={() => setShowReactions(true)}
+                    disabled={totalReactions === 0}
+                >
+                    <Text
+                        style={[
+                            styles.countText,
+                            totalReactions > 0 && styles.clickableCount,
+                        ]}
+                    >
+                        {totalReactions} reactions
+                    </Text>
+                </Pressable>
 
                 <Pressable onPress={() => setShowComments(value => !value)}>
                     <Text style={styles.countText}>
@@ -466,6 +500,84 @@ export default function PostCard({
                         {Math.round(imageScale * 100)}%
                     </Text>
                 </View>
+            </Modal>
+            {/* People who reacted */}
+            <Modal
+                visible={showReactions}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowReactions(false)}
+            >
+                <Pressable
+                    style={styles.reactionsOverlay}
+                    onPress={() => setShowReactions(false)}
+                >
+                    <Pressable
+                        style={styles.reactionsModal}
+                        onPress={event => event.stopPropagation()}
+                    >
+                        <View style={styles.reactionsHeader}>
+                            <Text style={styles.reactionsTitle}>
+                                Reactions
+                            </Text>
+
+                            <Pressable onPress={() => setShowReactions(false)}>
+                                <Text style={styles.reactionsClose}>✕</Text>
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.divider} />
+
+                        {reactionsLoading ? (
+                            <ActivityIndicator
+                                color={Colors.primary}
+                                style={styles.reactionsLoader}
+                            />
+                        ) : postReactions.length === 0 ? (
+                            <Text style={styles.noReactions}>
+                                No reactions yet.
+                            </Text>
+                        ) : (
+                            <ScrollView
+                                style={styles.reactionsList}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {postReactions.map(item => {
+                                    const reaction = reactions.find(
+                                        r => r.type === item.type,
+                                    );
+
+                                    return (
+                                        <Pressable
+                                            key={item.uid}
+                                            style={styles.reactionUser}
+                                            onPress={() => {
+                                                setShowReactions(false);
+                                                onViewProfile?.(item.uid);
+                                            }}
+                                        >
+                                            <Avatar author={item.author} size={42} />
+
+                                            <View style={styles.reactionUserInfo}>
+                                                <Text style={styles.reactionUserName}>
+                                                    {item.author.name || 'LinkUp User'}
+                                                </Text>
+
+                                                <Text style={styles.reactionUsername}>
+                                                    @{item.author.username || 'user'}
+                                                </Text>
+                                            </View>
+
+                                            <Text style={styles.reactionUserEmoji}>
+                                                {reaction?.symbol || ''}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </ScrollView>
+                        )}
+                    </Pressable>
+                </Pressable>
             </Modal>
         </View>
     );
@@ -755,5 +867,89 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#FFFFFF',
         marginTop: Spacing.sm,
+    },
+    clickableCount: {
+        color: Colors.primary,
+    },
+
+    reactionsOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: Spacing.md,
+    },
+
+    reactionsModal: {
+        width: '100%',
+        maxWidth: 420,
+        maxHeight: '75%',
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.large,
+        overflow: 'hidden',
+    },
+
+    reactionsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: Spacing.md,
+    },
+
+    reactionsTitle: {
+        fontFamily: Fonts.bold,
+        fontSize: 16,
+        color: Colors.text,
+    },
+
+    reactionsClose: {
+        fontSize: 18,
+        color: Colors.textSecondary,
+        paddingHorizontal: Spacing.xs,
+    },
+
+    reactionsList: {
+        paddingHorizontal: Spacing.md,
+    },
+
+    reactionsLoader: {
+        padding: Spacing.xl,
+    },
+
+    noReactions: {
+        fontFamily: Fonts.regular,
+        fontSize: 13,
+        color: Colors.textSecondary,
+        textAlign: 'center',
+        padding: Spacing.xl,
+    },
+
+    reactionUser: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: Spacing.sm,
+        gap: Spacing.sm,
+    },
+
+    reactionUserInfo: {
+        flex: 1,
+    },
+
+    reactionUserName: {
+        fontFamily: Fonts.bold,
+        fontSize: 13,
+        color: Colors.text,
+    },
+
+    reactionUsername: {
+        fontFamily: Fonts.regular,
+        fontSize: 11,
+        color: Colors.textSecondary,
+        marginTop: 3,
+    },
+
+    reactionUserEmoji: {
+        fontSize: 20,
+        marginRight: Spacing.sm,
     },
 });
