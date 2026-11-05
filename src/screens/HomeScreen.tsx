@@ -20,6 +20,7 @@ import PublicProfileScreen from './PublicProfileScreen';
 import CreatePostScreen from './CreatePostScreen';
 import { Post, PostAuthor, subscribeToFeed } from '../services/posts';
 import PostCard from '../components/PostCard';
+import logo from '../assets/logo.png';
 
 interface Props {
     user: User;
@@ -202,7 +203,14 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         contentContainerStyle={styles.sidebarContent}
                         showsVerticalScrollIndicator={false}
                     >
-                        <Text style={styles.brand}>LinkUp</Text>
+                        <View style={styles.brandContainer}>
+                            <Image
+                                source={logo}
+                                style={styles.brandLogo}
+                                resizeMode="contain"
+                            />
+                            <Text style={styles.brand}>LinkUp!</Text>
+                        </View>
 
                         <View style={styles.account}>
                             <Avatar
@@ -246,7 +254,14 @@ export default function HomeScreen({ user, onLogout }: Props) {
             <View style={styles.mainArea}>
                 <View style={styles.topBar}>
                     {isMobile ? (
-                        <Text style={styles.brand}>LinkUp</Text>
+                        <View style={styles.brandContainer}>
+                            <Image
+                                source={logo}
+                                style={styles.brandLogo}
+                                resizeMode="contain"
+                            />
+                            <Text style={styles.brand}>LinkUp!</Text>
+                        </View>
                     ) : (
                         <Text style={styles.topBarTitle}>
                             {viewingProfileId ? "Viewing Profile" : activePage}
@@ -824,5 +839,16 @@ const styles = StyleSheet.create({
         color: Colors.danger,
         textAlign: 'center',
         paddingVertical: Spacing.xl,
+    },
+    brandContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+
+    brandLogo: {
+        width: 38,
+        height: 38,
+        borderRadius: 10,
     },
 });
