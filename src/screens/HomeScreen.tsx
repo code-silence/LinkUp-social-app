@@ -15,6 +15,7 @@ import FriendsScreen from './FriendsScreen';
 import { User } from 'firebase/auth';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
 import { getUserProfile, UserProfile } from '../services/user';
+import PublicProfileScreen from './PublicProfileScreen';
 
 interface Props {
     user: User;
@@ -80,7 +81,7 @@ function Avatar({
 
 export default function HomeScreen({ user, onLogout }: Props) {
     const { width } = useWindowDimensions();
-    
+
     const [activePage, setActivePage] = useState<'Home' | 'Profile' | 'Friends'>('Home');
     const [globalProfile, setGlobalProfile] = useState<UserProfile | null>(null);
     const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
@@ -230,17 +231,10 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 </View>
 
                 {viewingProfileId ? (
-                    <View style={styles.placeholderContainer}>
-                        <Text style={styles.placeholderText}>
-                            Viewing external profile ID: {viewingProfileId}
-                        </Text>
-                        <Pressable 
-                            style={styles.backButton} 
-                            onPress={() => setViewingProfileId(null)}
-                        >
-                            <Text style={styles.backButtonText}>Go Back to Friends</Text>
-                        </Pressable>
-                    </View>
+                    <PublicProfileScreen
+                        userId={viewingProfileId}
+                        onBack={() => setViewingProfileId(null)}
+                    />
                 ) : activePage === 'Profile' ? (
                     <ProfileScreen
                         user={user}
@@ -249,9 +243,9 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         }
                     />
                 ) : activePage === 'Friends' ? (
-                    <FriendsScreen 
+                    <FriendsScreen
                         user={user}
-                        onViewProfile={(userId) => {
+                        onViewProfile={userId => {
                             setViewingProfileId(userId);
                         }}
                     />
@@ -353,7 +347,9 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             )}
                         </View>
 
-                        <Text style={styles.footer}>LinkUp · © 2026</Text>
+                        <Text style={styles.footer}>
+                            LinkUp · © 2026
+                        </Text>
                     </ScrollView>
                 )}
 
@@ -364,6 +360,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             .map(item => renderNavigationItem(item, true))}
                     </View>
                 )}
+
             </View>
         </View>
     );

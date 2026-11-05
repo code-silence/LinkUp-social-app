@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -15,12 +16,13 @@ import {
 
 import { User } from 'firebase/auth';
 import { UserProfile } from '../services/user';
-import { 
-    getSuggestions, 
-    getUsersByConnectionStatus, 
-    sendFriendRequest, 
-    acceptFriendRequest, 
-    removeConnection 
+import {
+    getSuggestions,
+    getUsersByConnectionStatus,
+    sendFriendRequest,
+    acceptFriendRequest,
+    removeConnection,
+    ConnectionStatus,
 } from '../services/friends';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
 
@@ -29,20 +31,37 @@ interface FriendsScreenProps {
     onViewProfile: (userId: string) => void;
 }
 
-type TabType = 'Suggestions' | 'Friend Requests' | 'Your Friends';
+type TabType =
+    | 'Suggestions'
+    | 'Friend Requests'
+    | 'Sent Requests'
+    | 'Your Friends';
 
-export default function FriendsScreen({ user, onViewProfile }: FriendsScreenProps) {
+const TABS: TabType[] = [
+    'Suggestions',
+    'Friend Requests',
+    'Sent Requests',
+    'Your Friends',
+];
+
+export default function FriendsScreen({
+    user,
+    onViewProfile,
+}: FriendsScreenProps) {
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
+    const cardWidth = width < 520 ? '100%' : 220;
 
     const [activeTab, setActiveTab] = useState<TabType>('Suggestions');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
-    
+    const [refreshKey, setRefreshKey] = useState(0);
+
     const [suggestions, setSuggestions] = useState<UserProfile[]>([]);
     const [requests, setRequests] = useState<UserProfile[]>([]);
+    const [sentRequests, setSentRequests] = useState<UserProfile[]>([]);
     const [friends, setFriends] = useState<UserProfile[]>([]);
-    
+
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     const showAlert = (title: string, message: string) => {
@@ -53,257 +72,420 @@ export default function FriendsScreen({ user, onViewProfile }: FriendsScreenProp
         }
     };
 
-    useEffect(() => {
-        loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab]);
+    const getDisplayName = (profile: UserProfile) => {
+        return (
+            profile.name ||
+            profile.username ||
+            profile.email?.split('@')[0] ||
+            'Unknown User'
+        );
+    };
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
+
         try {
             if (activeTab === 'Suggestions') {
-                const fetchedSuggestions = await getSuggestions(user.uid);
-                setSuggestions(fetchedSuggestions);
-            } else if (activeTab === 'Friend Requests') {
-                const fetchedRequests = await getUsersByConnectionStatus(user.uid, 'pending_received');
-                setRequests(fetchedRequests);
-            } else if (activeTab === 'Your Friends') {
-                const fetchedFriends = await getUsersByConnectionStatus(user.uid, 'accepted');
-                setFriends(fetchedFriends);
+                const data = await getSuggestions(user.uid);
+                setSuggestions(data);
+            } else {
+                const statusByTab: Record<
+                    Exclude<TabType, 'Suggestions'>,
+                    ConnectionStatus
+                > = {
+                    'Friend Requests': 'pending_received',
+                    'Sent Requests': 'pending_sent',
+                    'Your Friends': 'accepted',
+                };
+
+                const data = await getUsersByConnectionStatus(
+                    user.uid,
+                    statusByTab[activeTab],
+                );
+
+                if (activeTab === 'Friend Requests') setRequests(data);
+                if (activeTab === 'Sent Requests') setSentRequests(data);
+                if (activeTab === 'Your Friends') setFriends(data);
             }
         } catch (error) {
             console.error('Error loading friend data:', error);
-            showAlert('Error', 'Failed to load data. Please check your internet or Firebase rules.');
+            showAlert(
+                'Error',
+                'Could not load this list. Please check your connection and try again.',
+            );
         } finally {
             setLoading(false);
         }
-    };
+    }, [activeTab, user.uid]);
 
-    const handleAddFriend = async (targetUser: UserProfile) => {
-        if (!targetUser || !targetUser.uid) {
-            showAlert('Error', 'Invalid user data.');
-            return;
-        }
-        setActionLoading(targetUser.uid);
+    useEffect(() => {
+        loadData();
+    }, [loadData, refreshKey]);
+
+    const handleAddFriend = async (profile: UserProfile) => {
+        if (!profile.uid) return;
+
+        setActionLoading(profile.uid);
+
         try {
-            await sendFriendRequest(user.uid, targetUser.uid);
-            setSuggestions(prev => prev.filter(u => u.uid !== targetUser.uid));
-            showAlert('Request Sent', `Friend request sent to ${getDisplayName(targetUser)}`);
+            await sendFriendRequest(user.uid, profile.uid);
+            setSuggestions(previous =>
+                previous.filter(item => item.uid !== profile.uid),
+            );
+            showAlert(
+                'Request sent',
+                `Your friend request was sent to ${getDisplayName(profile)}.`,
+            );
         } catch (error: any) {
             console.error('Add friend error:', error);
-            showAlert('Error', error.message || 'Could not send friend request.');
+            showAlert('Could not send request', error.message || 'Please try again.');
         } finally {
             setActionLoading(null);
         }
     };
 
-    const handleConfirmRequest = async (targetUser: UserProfile) => {
-        if (!targetUser || !targetUser.uid) {
-            showAlert('Error', 'Invalid user data.');
-            return;
-        }
-        setActionLoading(targetUser.uid);
+    const handleAccept = async (profile: UserProfile) => {
+        if (!profile.uid) return;
+
+        setActionLoading(profile.uid);
+
         try {
-            await acceptFriendRequest(user.uid, targetUser.uid);
-            setRequests(prev => prev.filter(u => u.uid !== targetUser.uid));
-            showAlert('Accepted', `You are now friends with ${getDisplayName(targetUser)}`);
+            await acceptFriendRequest(user.uid, profile.uid);
+
+            setRequests(previous =>
+                previous.filter(item => item.uid !== profile.uid),
+            );
+
+            setRefreshKey(value => value + 1);
+
+            showAlert(
+                'Request accepted',
+                `You and ${getDisplayName(profile)} are now friends.`,
+            );
         } catch (error: any) {
-            console.error('Confirm request error:', error);
-            showAlert('Error', error.message || 'Could not accept request. Check Firebase rules.');
+            console.error('Accept request error:', error);
+            showAlert('Could not accept request', error.message || 'Please try again.');
         } finally {
             setActionLoading(null);
         }
     };
 
-    const handleRemoveAction = async (targetUserId: string) => {
-        if (!targetUserId) {
-            showAlert('Error', 'Invalid user ID.');
-            return;
-        }
-        setActionLoading(targetUserId);
+    const handleRemoveConnection = async (
+        profile: UserProfile,
+        successMessage: string,
+    ) => {
+        if (!profile.uid) return;
+
+        setActionLoading(profile.uid);
+
         try {
-            await removeConnection(user.uid, targetUserId);
-            
-            if (activeTab === 'Suggestions') {
-                setSuggestions(prev => prev.filter(u => u.uid !== targetUserId));
-            } else if (activeTab === 'Friend Requests') {
-                setRequests(prev => prev.filter(u => u.uid !== targetUserId));
-            } else if (activeTab === 'Your Friends') {
-                setFriends(prev => prev.filter(u => u.uid !== targetUserId));
-            }
+            await removeConnection(user.uid, profile.uid);
+
+            setRequests(previous =>
+                previous.filter(item => item.uid !== profile.uid),
+            );
+            setSentRequests(previous =>
+                previous.filter(item => item.uid !== profile.uid),
+            );
+            setFriends(previous =>
+                previous.filter(item => item.uid !== profile.uid),
+            );
+
+            setRefreshKey(value => value + 1);
+            showAlert('Done', successMessage);
         } catch (error: any) {
-            console.error('Remove action error:', error);
-            showAlert('Error', error.message || 'Action failed. Check Firebase rules.');
+            console.error('Connection removal error:', error);
+            showAlert('Action failed', error.message || 'Please try again.');
         } finally {
             setActionLoading(null);
         }
     };
 
-    const handleMessage = (name: string) => {
-        showAlert('Message', `Opening chat with ${name}... (Coming soon)`);
-    };
-
-    const getDisplayName = (profile: UserProfile) => {
-        return profile.name || (profile as any).displayName || 'Unknown User';
-    };
-
-    let currentList: UserProfile[] = [];
-    if (activeTab === 'Suggestions') currentList = suggestions;
-    else if (activeTab === 'Friend Requests') currentList = requests;
-    else if (activeTab === 'Your Friends') currentList = friends;
-
-    const displayedUsers = currentList.filter(u => 
-        getDisplayName(u).toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const renderAvatar = (imageUrl?: string, name?: string) => {
-        if (imageUrl) {
-            return <Image source={{ uri: imageUrl }} style={styles.cardAvatarImage} />;
+    const currentList = useMemo(() => {
+        switch (activeTab) {
+            case 'Suggestions':
+                return suggestions;
+            case 'Friend Requests':
+                return requests;
+            case 'Sent Requests':
+                return sentRequests;
+            case 'Your Friends':
+                return friends;
+            default:
+                return [];
         }
+    }, [activeTab, suggestions, requests, sentRequests, friends]);
+
+    const displayedUsers = useMemo(() => {
+        const search = searchQuery.trim().toLowerCase();
+
+        if (!search) return currentList;
+
+        return currentList.filter(profile => {
+            const name = getDisplayName(profile).toLowerCase();
+            const username = (profile.username || '').toLowerCase();
+
+            return name.includes(search) || username.includes(search);
+        });
+    }, [currentList, searchQuery]);
+
+    const renderAvatar = (profile: UserProfile) => {
+        const name = getDisplayName(profile);
+
+        if (profile.photoURL) {
+            return (
+                <Image
+                    source={{ uri: profile.photoURL }}
+                    style={styles.cardAvatarImage}
+                />
+            );
+        }
+
         return (
             <View style={styles.cardAvatarPlaceholder}>
                 <Text style={styles.cardAvatarText}>
-                    {(name || 'U').substring(0, 2).toUpperCase()}
+                    {name.substring(0, 2).toUpperCase()}
                 </Text>
             </View>
         );
     };
 
-    const renderCard = (profile: UserProfile) => {
+    const renderActions = (profile: UserProfile) => {
         const isProcessing = actionLoading === profile.uid;
+
+        if (activeTab === 'Suggestions') {
+            return (
+                <Pressable
+                    style={[
+                        styles.primaryButton,
+                        isProcessing && styles.buttonDisabled,
+                    ]}
+                    onPress={() => handleAddFriend(profile)}
+                    disabled={isProcessing}
+                >
+                    <Text style={styles.primaryButtonText}>
+                        {isProcessing ? 'Sending...' : 'Add friend'}
+                    </Text>
+                </Pressable>
+            );
+        }
+
+        if (activeTab === 'Friend Requests') {
+            return (
+                <View style={styles.actionGroup}>
+                    <Pressable
+                        style={[
+                            styles.primaryButton,
+                            isProcessing && styles.buttonDisabled,
+                        ]}
+                        onPress={() => handleAccept(profile)}
+                        disabled={isProcessing}
+                    >
+                        <Text style={styles.primaryButtonText}>
+                            {isProcessing ? 'Accepting...' : 'Accept'}
+                        </Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={[
+                            styles.secondaryButton,
+                            isProcessing && styles.buttonDisabled,
+                        ]}
+                        onPress={() =>
+                            handleRemoveConnection(
+                                profile,
+                                'Friend request declined.',
+                            )
+                        }
+                        disabled={isProcessing}
+                    >
+                        <Text style={styles.secondaryButtonText}>Decline</Text>
+                    </Pressable>
+                </View>
+            );
+        }
+
+        if (activeTab === 'Sent Requests') {
+            return (
+                <Pressable
+                    style={[
+                        styles.secondaryButton,
+                        isProcessing && styles.buttonDisabled,
+                    ]}
+                    onPress={() =>
+                        handleRemoveConnection(
+                            profile,
+                            'Friend request cancelled.',
+                        )
+                    }
+                    disabled={isProcessing}
+                >
+                    <Text style={styles.secondaryButtonText}>
+                        {isProcessing ? 'Cancelling...' : 'Cancel request'}
+                    </Text>
+                </Pressable>
+            );
+        }
+
+        return (
+            <Pressable
+                style={[
+                    styles.secondaryButton,
+                    isProcessing && styles.buttonDisabled,
+                ]}
+                onPress={() =>
+                    handleRemoveConnection(
+                        profile,
+                        `You are no longer friends with ${getDisplayName(profile)}.`,
+                    )
+                }
+                disabled={isProcessing}
+            >
+                <Text style={styles.secondaryButtonText}>
+                    {isProcessing ? 'Removing...' : 'Unfriend'}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderCard = (profile: UserProfile) => {
         const displayName = getDisplayName(profile);
 
         return (
-            <View key={profile.uid} style={styles.card}>
-                <Pressable onPress={() => onViewProfile(profile.uid)}>
+            <View
+                key={profile.uid}
+                style={[styles.card, { width: cardWidth }]}
+            >
+                <Pressable
+                    onPress={() => onViewProfile(profile.uid)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${displayName}'s profile`}
+                >
                     {profile.coverPhotoURL ? (
-                        <Image source={{ uri: profile.coverPhotoURL }} style={styles.cardCover} />
+                        <Image
+                            source={{ uri: profile.coverPhotoURL }}
+                            style={styles.cardCover}
+                        />
                     ) : (
                         <View style={styles.cardCoverPlaceholder} />
                     )}
-                    
+
                     <View style={styles.cardAvatarWrapper}>
-                        {renderAvatar(profile.photoURL, displayName)}
+                        {renderAvatar(profile)}
                     </View>
                 </Pressable>
 
                 <View style={styles.cardInfo}>
-                    <Text style={styles.cardName} numberOfLines={1}>
-                        {displayName}
-                    </Text>
-                    <Text style={styles.cardMutual}>
-                        {profile.friendsCount || 0} mutual friends
+                    <Pressable onPress={() => onViewProfile(profile.uid)}>
+                        <Text style={styles.cardName} numberOfLines={1}>
+                            {displayName}
+                        </Text>
+                    </Pressable>
+
+                    {profile.username ? (
+                        <Text style={styles.cardUsername} numberOfLines={1}>
+                            @{profile.username}
+                        </Text>
+                    ) : null}
+
+                    <Text style={styles.cardMeta}>
+                        {activeTab === 'Your Friends'
+                            ? `${profile.friendsCount || 0} friends`
+                            : activeTab === 'Friend Requests'
+                              ? 'Wants to connect with you'
+                              : activeTab === 'Sent Requests'
+                                ? 'Request pending'
+                                : 'Suggested for you'}
                     </Text>
 
                     <View style={styles.cardActions}>
-                        {activeTab === 'Suggestions' && (
-                            <>
-                                <Pressable 
-                                    style={[styles.primaryButton, isProcessing && styles.buttonDisabled]}
-                                    onPress={() => handleAddFriend(profile)}
-                                    disabled={isProcessing}
-                                >
-                                    <Text style={styles.primaryButtonText}>
-                                        {isProcessing ? 'Sending...' : 'Add friend'}
-                                    </Text>
-                                </Pressable>
-                                <Pressable 
-                                    style={[styles.secondaryButton, isProcessing && styles.buttonDisabled]}
-                                    onPress={() => handleRemoveAction(profile.uid)}
-                                    disabled={isProcessing}
-                                >
-                                    <Text style={styles.secondaryButtonText}>Remove</Text>
-                                </Pressable>
-                            </>
-                        )}
-                        
-                        {activeTab === 'Friend Requests' && (
-                            <>
-                                <Pressable 
-                                    style={[styles.primaryButton, isProcessing && styles.buttonDisabled]}
-                                    onPress={() => handleConfirmRequest(profile)}
-                                    disabled={isProcessing}
-                                >
-                                    <Text style={styles.primaryButtonText}>
-                                        {isProcessing ? 'Accepting...' : 'Confirm'}
-                                    </Text>
-                                </Pressable>
-                                <Pressable 
-                                    style={[styles.secondaryButton, isProcessing && styles.buttonDisabled]}
-                                    onPress={() => handleRemoveAction(profile.uid)}
-                                    disabled={isProcessing}
-                                >
-                                    <Text style={styles.secondaryButtonText}>Delete</Text>
-                                </Pressable>
-                            </>
-                        )}
-
-                        {activeTab === 'Your Friends' && (
-                            <>
-                                <Pressable 
-                                    style={styles.primaryButton}
-                                    onPress={() => handleMessage(displayName)}
-                                >
-                                    <Text style={styles.primaryButtonText}>Message</Text>
-                                </Pressable>
-                                <Pressable 
-                                    style={[styles.secondaryButton, isProcessing && styles.buttonDisabled]}
-                                    onPress={() => handleRemoveAction(profile.uid)}
-                                    disabled={isProcessing}
-                                >
-                                    <Text style={styles.secondaryButtonText}>
-                                        {isProcessing ? 'Removing...' : 'Unfriend'}
-                                    </Text>
-                                </Pressable>
-                            </>
-                        )}
+                        {renderActions(profile)}
                     </View>
                 </View>
             </View>
         );
     };
 
+    const getEmptyMessage = () => {
+        switch (activeTab) {
+            case 'Suggestions':
+                return 'No new suggestions right now.';
+            case 'Friend Requests':
+                return 'You have no pending friend requests.';
+            case 'Sent Requests':
+                return 'You have no sent requests.';
+            case 'Your Friends':
+                return "You haven't added any friends yet.";
+        }
+    };
+
     return (
-        <View style={[styles.container, isMobile ? styles.containerMobile : styles.containerDesktop]}>
-            <View style={[styles.sidebar, isMobile && styles.sidebarMobile]}>
+        <View
+            style={[
+                styles.container,
+                isMobile ? styles.containerMobile : styles.containerDesktop,
+            ]}
+        >
+            <View
+                style={[
+                    styles.sidebar,
+                    isMobile && styles.sidebarMobile,
+                ]}
+            >
                 <Text style={styles.sidebarTitle}>Friends</Text>
-                
-                <Pressable 
-                    style={[styles.menuItem, activeTab === 'Suggestions' && styles.menuItemActive]}
-                    onPress={() => setActiveTab('Suggestions')}
-                >
-                    <View style={styles.menuIconWrapper}>
-                        <Text style={styles.menuIcon}>👥</Text>
-                    </View>
-                    <Text style={styles.menuText}>Suggestions</Text>
-                </Pressable>
 
-                <Pressable 
-                    style={[styles.menuItem, activeTab === 'Friend Requests' && styles.menuItemActive]}
-                    onPress={() => setActiveTab('Friend Requests')}
-                >
-                    <View style={styles.menuIconWrapper}>
-                        <Text style={styles.menuIcon}>📥</Text>
-                    </View>
-                    <Text style={styles.menuText}>Friend requests</Text>
-                </Pressable>
-
-                <Pressable 
-                    style={[styles.menuItem, activeTab === 'Your Friends' && styles.menuItemActive]}
-                    onPress={() => setActiveTab('Your Friends')}
-                >
-                    <View style={styles.menuIconWrapper}>
-                        <Text style={styles.menuIcon}>👤</Text>
-                    </View>
-                    <Text style={styles.menuText}>All friends</Text>
-                </Pressable>
+                <View style={styles.tabList}>
+                    {TABS.map(tab => (
+                        <Pressable
+                            key={tab}
+                            style={[
+                                styles.menuItem,
+                                activeTab === tab && styles.menuItemActive,
+                            ]}
+                            onPress={() => {
+                                setActiveTab(tab);
+                                setSearchQuery('');
+                            }}
+                        >
+                            <Text
+                                style={[
+                                    styles.menuText,
+                                    activeTab === tab && styles.menuTextActive,
+                                ]}
+                            >
+                                {tab}
+                            </Text>
+                        </Pressable>
+                    ))}
+                </View>
             </View>
 
-            <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>{activeTab}</Text>
+            <ScrollView
+                style={styles.mainContent}
+                contentContainerStyle={styles.mainContentInner}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View
+                    style={[
+                        styles.header,
+                        isMobile && styles.headerMobile,
+                    ]}
+                >
+                    <View>
+                        <Text style={styles.headerTitle}>{activeTab}</Text>
+                        <Text style={styles.headerSubtitle}>
+                            {activeTab === 'Suggestions'
+                                ? 'Discover people on LinkUp.'
+                                : 'Manage your connections.'}
+                        </Text>
+                    </View>
+
                     <TextInput
-                        style={styles.searchInput}
+                        style={[
+                            styles.searchInput,
+                            isMobile && styles.searchInputMobile,
+                        ]}
                         placeholder={`Search ${activeTab.toLowerCase()}...`}
                         placeholderTextColor={Colors.textSecondary}
                         value={searchQuery}
@@ -313,35 +495,53 @@ export default function FriendsScreen({ user, onViewProfile }: FriendsScreenProp
 
                 {loading ? (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={Colors.primary} />
-                        <Text style={styles.loadingText}>Loading people...</Text>
+                        <ActivityIndicator
+                            size="large"
+                            color={Colors.primary}
+                        />
+                        <Text style={styles.loadingText}>
+                            Loading people...
+                        </Text>
+                    </View>
+                ) : displayedUsers.length > 0 ? (
+                    <View style={styles.grid}>
+                        {displayedUsers.map(renderCard)}
                     </View>
                 ) : (
-                    <View style={styles.grid}>
-                        {displayedUsers.length > 0 ? (
-                            displayedUsers.map(u => renderCard(u))
-                        ) : (
-                            <View style={styles.emptyContainer}>
-                                <View style={styles.emptyIconContainer}>
-                                    <Text style={styles.emptyIcon}>!</Text>
-                                </View>
-                                <Text style={styles.emptyText}>
-                                    {activeTab === 'Your Friends' 
-                                        ? "You don't have any friends yet." 
-                                        : activeTab === 'Friend Requests'
-                                        ? "No pending friend requests."
-                                        : "No suggestions found."}
+                    <View style={styles.emptyContainer}>
+                        <View style={styles.emptyIconContainer}>
+                            <Text style={styles.emptyIcon}>!</Text>
+                        </View>
+
+                        <Text style={styles.emptyText}>
+                            {searchQuery.trim()
+                                ? 'No matching people found.'
+                                : getEmptyMessage()}
+                        </Text>
+
+                        {activeTab === 'Your Friends' && (
+                            <Pressable
+                                style={styles.findFriendsButton}
+                                onPress={() => {
+                                    setActiveTab('Suggestions');
+                                    setSearchQuery('');
+                                }}
+                            >
+                                <Text style={styles.findFriendsText}>
+                                    Find friends
                                 </Text>
-                                
-                                {activeTab === 'Your Friends' && (
-                                    <Pressable 
-                                        style={styles.findFriendsButton}
-                                        onPress={() => setActiveTab('Suggestions')}
-                                    >
-                                        <Text style={styles.findFriendsText}>Find Friends</Text>
-                                    </Pressable>
-                                )}
-                            </View>
+                            </Pressable>
+                        )}
+
+                        {activeTab === 'Suggestions' && (
+                            <Pressable
+                                style={styles.findFriendsButton}
+                                onPress={() => setRefreshKey(value => value + 1)}
+                            >
+                                <Text style={styles.findFriendsText}>
+                                    Refresh suggestions
+                                </Text>
+                            </Pressable>
                         )}
                     </View>
                 )}
@@ -362,6 +562,7 @@ const styles = StyleSheet.create({
         flexDirection: 'column',
     },
     sidebar: {
+        width: 235,
         backgroundColor: Colors.surface,
         borderRightWidth: 1,
         borderRightColor: Colors.border,
@@ -372,10 +573,8 @@ const styles = StyleSheet.create({
         borderRightWidth: 0,
         borderBottomWidth: 1,
         borderBottomColor: Colors.border,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: Spacing.sm,
-        flexWrap: 'wrap',
+        paddingVertical: Spacing.md,
+        paddingHorizontal: Spacing.md,
     },
     sidebarTitle: {
         fontFamily: Fonts.black,
@@ -383,79 +582,84 @@ const styles = StyleSheet.create({
         color: Colors.text,
         marginBottom: Spacing.lg,
     },
+    tabList: {
+        flexDirection: 'column',
+    },
     menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
         paddingVertical: 12,
         paddingHorizontal: Spacing.md,
         borderRadius: Radius.medium,
         marginBottom: Spacing.sm,
-        marginRight: Spacing.sm,
     },
     menuItemActive: {
         backgroundColor: Colors.accent,
     },
-    menuIconWrapper: {
-        width: 35,
-        height: 35,
-        borderRadius: Radius.round,
-        backgroundColor: Colors.background,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    menuIcon: {
-        fontSize: 16,
-    },
     menuText: {
         fontFamily: Fonts.bold,
-        fontSize: 15,
-        color: Colors.text,
+        fontSize: 14,
+        color: Colors.textSecondary,
+    },
+    menuTextActive: {
+        color: Colors.primary,
     },
     mainContent: {
         flex: 1,
+    },
+    mainContentInner: {
         padding: Spacing.xl,
+        paddingBottom: Spacing.xl * 2,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: Spacing.xl,
         flexWrap: 'wrap',
         gap: Spacing.md,
+        marginBottom: Spacing.xl,
+    },
+    headerMobile: {
+        alignItems: 'stretch',
     },
     headerTitle: {
         fontFamily: Fonts.black,
-        fontSize: 20,
+        fontSize: 22,
         color: Colors.text,
+    },
+    headerSubtitle: {
+        fontFamily: Fonts.regular,
+        fontSize: 13,
+        color: Colors.textSecondary,
+        marginTop: 4,
     },
     searchInput: {
         backgroundColor: Colors.surface,
         borderWidth: 1,
         borderColor: Colors.border,
         borderRadius: Radius.round,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        width: 250,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: 11,
+        width: 260,
         fontFamily: Fonts.regular,
         fontSize: 14,
         color: Colors.text,
         outlineStyle: 'none',
     } as any,
+    searchInputMobile: {
+        width: '100%',
+    },
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 15,
-        justifyContent: 'flex-start',
+        gap: Spacing.md,
+        alignItems: 'flex-start',
     },
     card: {
-        width: 210,
         backgroundColor: Colors.surface,
         borderRadius: Radius.large,
         borderWidth: 1,
         borderColor: Colors.border,
         overflow: 'hidden',
-        marginBottom: Spacing.md,
+        marginBottom: Spacing.sm,
     },
     cardCover: {
         width: '100%',
@@ -471,7 +675,7 @@ const styles = StyleSheet.create({
     cardAvatarWrapper: {
         width: 80,
         height: 80,
-        borderRadius: 40,
+        borderRadius: Radius.round,
         borderWidth: 3,
         borderColor: Colors.surface,
         position: 'absolute',
@@ -507,31 +711,42 @@ const styles = StyleSheet.create({
         color: Colors.text,
         textAlign: 'center',
     },
-    cardMutual: {
+    cardUsername: {
+        fontFamily: Fonts.regular,
+        fontSize: 12,
+        color: Colors.primary,
+        marginTop: 3,
+    },
+    cardMeta: {
         fontFamily: Fonts.regular,
         fontSize: 12,
         color: Colors.textSecondary,
-        marginTop: 4,
-        marginBottom: 15,
+        marginTop: 6,
+        marginBottom: Spacing.md,
+        textAlign: 'center',
     },
     cardActions: {
         width: '100%',
-        gap: 8,
+    },
+    actionGroup: {
+        gap: Spacing.sm,
     },
     primaryButton: {
         backgroundColor: Colors.primary,
-        paddingVertical: 8,
+        paddingVertical: 9,
+        paddingHorizontal: Spacing.md,
         borderRadius: Radius.medium,
         alignItems: 'center',
     },
     primaryButtonText: {
         fontFamily: Fonts.bold,
         fontSize: 13,
-        color: '#FFFFFF',
+        color: Colors.surface,
     },
     secondaryButton: {
         backgroundColor: Colors.accent,
-        paddingVertical: 8,
+        paddingVertical: 9,
+        paddingHorizontal: Spacing.md,
         borderRadius: Radius.medium,
         alignItems: 'center',
     },
@@ -551,11 +766,11 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.regular,
         fontSize: 14,
         color: Colors.textSecondary,
-        marginTop: 10,
+        marginTop: Spacing.sm,
     },
     emptyContainer: {
         width: '100%',
-        paddingVertical: 80,
+        paddingVertical: 70,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -575,9 +790,10 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontFamily: Fonts.bold,
-        fontSize: 16,
+        fontSize: 15,
         color: Colors.text,
         marginBottom: Spacing.lg,
+        textAlign: 'center',
     },
     findFriendsButton: {
         backgroundColor: Colors.primary,
@@ -588,6 +804,6 @@ const styles = StyleSheet.create({
     findFriendsText: {
         fontFamily: Fonts.bold,
         fontSize: 14,
-        color: '#FFFFFF',
+        color: Colors.surface,
     },
 });
