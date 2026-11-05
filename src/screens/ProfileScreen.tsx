@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -30,6 +29,8 @@ import { Colors, Fonts, Radius, Spacing } from '../theme';
 
 interface Props {
     user: User;
+    // Callback function to sync profile changes with the global state in HomeScreen
+    onProfileUpdate?: (profile: UserProfile) => void;
 }
 
 type ImageType = 'profile' | 'cover';
@@ -89,136 +90,133 @@ const PROFILE_FIELDS: {
     title: string;
     fields: Field[];
 }[] = [
-        {
-            title: 'Basic information',
-            fields: [
-                {
-                    key: 'name',
-                    label: 'Full name',
-                    placeholder: 'Your name',
-                },
-                {
-                    key: 'username',
-                    label: 'Username',
-                    placeholder: 'Choose a username',
-                },
-                {
-                    key: 'bio',
-                    label: 'Bio',
-                    placeholder: 'Tell people something about yourself',
-                    multiline: true,
-                },
-            ],
-        },
-        {
-            title: 'Personal information',
-            fields: [
-
-
-
-                {
-                    key: 'phone',
-                    label: 'Phone number',
-                    placeholder: 'Your phone number',
-                },
-            ],
-        },
-        {
-            title: 'Location',
-            fields: [
-                {
-                    key: 'address',
-                    label: 'Address',
-                    placeholder: 'Your address',
-                },
-                {
-                    key: 'city',
-                    label: 'City',
-                    placeholder: 'Your city',
-                },
-                {
-                    key: 'state',
-                    label: 'State / Division',
-                    placeholder: 'Your state or division',
-                },
-                {
-                    key: 'country',
-                    label: 'Country',
-                    placeholder: 'Your country',
-                },
-                {
-                    key: 'hometown',
-                    label: 'Hometown',
-                    placeholder: 'Your hometown',
-                },
-            ],
-        },
-        {
-            title: 'Education',
-            fields: [
-                {
-                    key: 'college',
-                    label: 'College',
-                    placeholder: 'Your college',
-                },
-                {
-                    key: 'university',
-                    label: 'University',
-                    placeholder: 'Your university',
-                },
-                {
-                    key: 'degree',
-                    label: 'Degree',
-                    placeholder: 'Your degree',
-                },
-                {
-                    key: 'highSchool',
-                    label: 'High school',
-                    placeholder: 'Your high school',
-                },
-            ],
-        },
-        {
-            title: 'Work',
-            fields: [
-                {
-                    key: 'jobTitle',
-                    label: 'Job title',
-                    placeholder: 'Your job title',
-                },
-                {
-                    key: 'workplace',
-                    label: 'Workplace',
-                    placeholder: 'Where do you work?',
-                },
-            ],
-        },
-        {
-            title: 'Social links',
-            fields: [
-                {
-                    key: 'website',
-                    label: 'Website',
-                    placeholder: 'https://example.com',
-                },
-                {
-                    key: 'facebook',
-                    label: 'Facebook',
-                    placeholder: 'Facebook profile URL',
-                },
-                {
-                    key: 'instagram',
-                    label: 'Instagram',
-                    placeholder: 'Instagram profile URL',
-                },
-                {
-                    key: 'linkedin',
-                    label: 'LinkedIn',
-                    placeholder: 'LinkedIn profile URL',
-                },
-            ],
-        },
-    ];
+    {
+        title: 'Basic information',
+        fields: [
+            {
+                key: 'name',
+                label: 'Full name',
+                placeholder: 'Your name',
+            },
+            {
+                key: 'username',
+                label: 'Username',
+                placeholder: 'Choose a username',
+            },
+            {
+                key: 'bio',
+                label: 'Bio',
+                placeholder: 'Tell people something about yourself',
+                multiline: true,
+            },
+        ],
+    },
+    {
+        title: 'Personal information',
+        fields: [
+            {
+                key: 'phone',
+                label: 'Phone number',
+                placeholder: 'Your phone number',
+            },
+        ],
+    },
+    {
+        title: 'Location',
+        fields: [
+            {
+                key: 'address',
+                label: 'Address',
+                placeholder: 'Your address',
+            },
+            {
+                key: 'city',
+                label: 'City',
+                placeholder: 'Your city',
+            },
+            {
+                key: 'state',
+                label: 'State / Division',
+                placeholder: 'Your state or division',
+            },
+            {
+                key: 'country',
+                label: 'Country',
+                placeholder: 'Your country',
+            },
+            {
+                key: 'hometown',
+                label: 'Hometown',
+                placeholder: 'Your hometown',
+            },
+        ],
+    },
+    {
+        title: 'Education',
+        fields: [
+            {
+                key: 'college',
+                label: 'College',
+                placeholder: 'Your college',
+            },
+            {
+                key: 'university',
+                label: 'University',
+                placeholder: 'Your university',
+            },
+            {
+                key: 'degree',
+                label: 'Degree',
+                placeholder: 'Your degree',
+            },
+            {
+                key: 'highSchool',
+                label: 'High school',
+                placeholder: 'Your high school',
+            },
+        ],
+    },
+    {
+        title: 'Work',
+        fields: [
+            {
+                key: 'jobTitle',
+                label: 'Job title',
+                placeholder: 'Your job title',
+            },
+            {
+                key: 'workplace',
+                label: 'Workplace',
+                placeholder: 'Where do you work?',
+            },
+        ],
+    },
+    {
+        title: 'Social links',
+        fields: [
+            {
+                key: 'website',
+                label: 'Website',
+                placeholder: 'https://example.com',
+            },
+            {
+                key: 'facebook',
+                label: 'Facebook',
+                placeholder: 'Facebook profile URL',
+            },
+            {
+                key: 'instagram',
+                label: 'Instagram',
+                placeholder: 'Instagram profile URL',
+            },
+            {
+                key: 'linkedin',
+                label: 'LinkedIn',
+                placeholder: 'LinkedIn profile URL',
+            },
+        ],
+    },
+];
 
 function Avatar({
     name,
@@ -268,7 +266,7 @@ function Avatar({
     );
 }
 
-export default function ProfileScreen({ user }: Props) {
+export default function ProfileScreen({ user, onProfileUpdate }: Props) {
     const { width } = useWindowDimensions();
 
     const isMobile = width < 700;
@@ -455,13 +453,20 @@ export default function ProfileScreen({ user }: Props) {
 
             await updateUserProfile(user.uid, updatedData);
 
-            setProfile(previous => ({
+            const newlyUpdatedProfile: UserProfile = {
                 ...DEFAULT_PROFILE,
-                ...previous,
+                ...profile,
                 ...updatedData,
                 uid: user.uid,
                 email: user.email || '',
-            }));
+            };
+
+            setProfile(newlyUpdatedProfile);
+            
+            // Sync with global HomeScreen state to update avatars everywhere instantly
+            if (onProfileUpdate) {
+                onProfileUpdate(newlyUpdatedProfile);
+            }
 
             setEditVisible(false);
             setNotice('Your profile has been updated.');
@@ -905,7 +910,6 @@ export default function ProfileScreen({ user }: Props) {
                             </View>
 
                             {/* Profile Fields */}
-                            {/* Profile Fields */}
                             {PROFILE_FIELDS.map(section => (
                                 <View key={section.title} style={styles.formSection}>
                                     <Text style={styles.formSectionTitle}>
@@ -1038,7 +1042,6 @@ export default function ProfileScreen({ user }: Props) {
                             ))}
 
                             {/* Interests and Languages */}
-                            {/* Interests and Languages */}
                             <View style={styles.formSection}>
                                 <Text style={styles.formSectionTitle}>
                                     More about you
@@ -1123,32 +1126,26 @@ const styles = StyleSheet.create({
         minHeight: '100%',
         backgroundColor: Colors.background,
     },
-
     scroll: {
         flex: 1,
     },
-
     scrollContent: {
         padding: Spacing.lg,
         alignItems: 'center',
     },
-
     page: {
         width: '100%',
         maxWidth: 1050,
     },
-
     pageCompact: {
         maxWidth: 720,
     },
-
     pageHeading: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: 22,
     },
-
     eyebrow: {
         fontFamily: Fonts.bold,
         fontSize: 10,
@@ -1156,26 +1153,22 @@ const styles = StyleSheet.create({
         color: Colors.primary,
         marginBottom: 7,
     },
-
     pageTitle: {
         fontFamily: Fonts.black,
         fontSize: 27,
         color: Colors.text,
     },
-
     editButton: {
         paddingHorizontal: 17,
         paddingVertical: 11,
         borderRadius: Radius.medium,
         backgroundColor: Colors.primary,
     },
-
     editButtonText: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.surface,
     },
-
     profileCard: {
         backgroundColor: Colors.surface,
         borderRadius: Radius.large,
@@ -1183,44 +1176,37 @@ const styles = StyleSheet.create({
         borderColor: Colors.border,
         overflow: 'hidden',
     },
-
     coverContainer: {
         height: 190,
         width: '100%',
         overflow: 'hidden',
     },
-
     coverImage: {
         width: '100%',
         height: '100%',
     },
-
     coverFallback: {
         flex: 1,
         backgroundColor: Colors.primaryDark,
         justifyContent: 'center',
         alignItems: 'center',
     },
-
     coverBrand: {
         fontFamily: Fonts.black,
         fontSize: 34,
         color: Colors.accent,
         opacity: 0.65,
     },
-
     profileHeaderContent: {
         paddingHorizontal: Spacing.lg,
         paddingBottom: Spacing.lg,
     },
-
     profileIdentity: {
         flexDirection: 'row',
         alignItems: 'flex-start',
         gap: 17,
         marginTop: -35,
     },
-
     avatar: {
         backgroundColor: Colors.accent,
         alignItems: 'center',
@@ -1230,36 +1216,30 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         flexShrink: 0,
     },
-
     avatarImage: {
         width: '100%',
         height: '100%',
     },
-
     avatarInitials: {
         fontFamily: Fonts.black,
         color: Colors.primaryDark,
     },
-
     profileDetails: {
         flex: 1,
         minWidth: 0,
         paddingTop: 43,
     },
-
     profileName: {
         fontFamily: Fonts.black,
         fontSize: 22,
         color: Colors.text,
     },
-
     username: {
         fontFamily: Fonts.regular,
         fontSize: 13,
         color: Colors.primary,
         marginTop: 4,
     },
-
     bio: {
         fontFamily: Fonts.regular,
         fontSize: 13,
@@ -1267,14 +1247,12 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         marginTop: 10,
     },
-
     location: {
         fontFamily: Fonts.bold,
         fontSize: 12,
         color: Colors.textSecondary,
         marginTop: 8,
     },
-
     profileStats: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1284,37 +1262,31 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: Colors.border,
     },
-
     stat: {
         alignItems: 'center',
         gap: 4,
     },
-
     statNumber: {
         fontFamily: Fonts.black,
         fontSize: 17,
         color: Colors.text,
     },
-
     statLabel: {
         fontFamily: Fonts.regular,
         fontSize: 11,
         color: Colors.textSecondary,
     },
-
     statDivider: {
         width: 1,
         height: 30,
         backgroundColor: Colors.border,
     },
-
     informationLayout: {
         flexDirection: 'row',
         alignItems: 'stretch',
         gap: Spacing.lg,
         marginTop: Spacing.lg,
     },
-
     aboutCard: {
         flex: 1,
         minWidth: 0,
@@ -1324,7 +1296,6 @@ const styles = StyleSheet.create({
         borderColor: Colors.border,
         padding: Spacing.lg,
     },
-
     accountCard: {
         width: 270,
         backgroundColor: Colors.surface,
@@ -1333,70 +1304,59 @@ const styles = StyleSheet.create({
         borderColor: Colors.border,
         padding: Spacing.lg,
     },
-
     sectionTitle: {
         fontFamily: Fonts.black,
         fontSize: 17,
         color: Colors.text,
         marginBottom: 16,
     },
-
     aboutBio: {
         fontFamily: Fonts.regular,
         fontSize: 13,
         lineHeight: 21,
         color: Colors.textSecondary,
     },
-
     mutedText: {
         fontFamily: Fonts.regular,
         fontSize: 13,
         lineHeight: 20,
         color: Colors.textSecondary,
     },
-
     infoSection: {
         marginTop: 22,
     },
-
     infoHeading: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.text,
         marginBottom: 12,
     },
-
     chipContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
     },
-
     chip: {
         backgroundColor: Colors.accent,
         borderRadius: Radius.round,
         paddingHorizontal: 12,
         paddingVertical: 7,
     },
-
     chipText: {
         fontFamily: Fonts.bold,
         fontSize: 11,
         color: Colors.primary,
     },
-
     infoDivider: {
         height: 1,
         backgroundColor: Colors.border,
         marginVertical: 22,
     },
-
     detailsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 18,
     },
-
     detailItem: {
         width: '45%',
         minWidth: 0,
@@ -1407,24 +1367,20 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         marginBottom: 5,
     },
-
     detailValue: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.text,
     },
-
     accountInfoItem: {
         marginBottom: 20,
     },
-
     uidText: {
         fontFamily: Fonts.regular,
         fontSize: 11,
         lineHeight: 17,
         color: Colors.text,
     },
-
     secondaryButton: {
         backgroundColor: Colors.accent,
         padding: 12,
@@ -1432,27 +1388,23 @@ const styles = StyleSheet.create({
         borderRadius: Radius.medium,
         marginTop: 5,
     },
-
     secondaryButtonText: {
         fontFamily: Fonts.bold,
         fontSize: 12,
         color: Colors.primary,
     },
-
     successMessage: {
         fontFamily: Fonts.bold,
         fontSize: 12,
         color: Colors.success,
         marginTop: 15,
     },
-
     errorMessage: {
         fontFamily: Fonts.bold,
         fontSize: 12,
         color: Colors.danger,
         marginTop: 12,
     },
-
     centerState: {
         flex: 1,
         minHeight: 350,
@@ -1461,14 +1413,12 @@ const styles = StyleSheet.create({
         padding: Spacing.lg,
         backgroundColor: Colors.background,
     },
-
     stateTitle: {
         fontFamily: Fonts.black,
         fontSize: 18,
         color: Colors.text,
         marginBottom: 8,
     },
-
     stateText: {
         fontFamily: Fonts.regular,
         fontSize: 13,
@@ -1476,7 +1426,6 @@ const styles = StyleSheet.create({
         marginTop: 12,
         textAlign: 'center',
     },
-
     primaryButton: {
         backgroundColor: Colors.primary,
         paddingHorizontal: 20,
@@ -1485,19 +1434,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-
     primaryButtonText: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.surface,
     },
-
     disabledButton: {
         opacity: 0.55,
     },
-
-    // Edit Modal
-
     modalOverlay: {
         flex: 1,
         backgroundColor: Colors.background,
@@ -1505,7 +1449,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: Spacing.lg,
     },
-
     modalContainer: {
         width: '100%',
         maxWidth: 650,
@@ -1516,14 +1459,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: Colors.border,
     },
-
     modalMobile: {
         maxWidth: '100%',
         maxHeight: '100%',
         height: '100%',
         borderRadius: 0,
     },
-
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1532,20 +1473,17 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: Colors.border,
     },
-
     modalTitle: {
         fontFamily: Fonts.black,
         fontSize: 20,
         color: Colors.text,
     },
-
     modalSubtitle: {
         fontFamily: Fonts.regular,
         fontSize: 12,
         color: Colors.textSecondary,
         marginTop: 5,
     },
-
     closeButton: {
         width: 35,
         height: 35,
@@ -1554,60 +1492,49 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-
     closeButtonText: {
         fontSize: 25,
         color: Colors.textSecondary,
     },
-
     modalScroll: {
         flexShrink: 1,
     },
-
     modalContent: {
         padding: Spacing.lg,
         paddingBottom: Spacing.xl,
     },
-
     imageUploadSection: {
         marginBottom: 25,
     },
-
     formSection: {
         marginBottom: 25,
     },
-
     formSectionTitle: {
         fontFamily: Fonts.black,
         fontSize: 15,
         color: Colors.text,
         marginBottom: 17,
     },
-
     uploadRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 15,
         marginBottom: 20,
     },
-
     uploadInfo: {
         flex: 1,
     },
-
     uploadTitle: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.text,
     },
-
     uploadDescription: {
         fontFamily: Fonts.regular,
         fontSize: 11,
         color: Colors.textSecondary,
         marginTop: 5,
     },
-
     uploadButton: {
         alignSelf: 'flex-start',
         marginTop: 9,
@@ -1616,13 +1543,11 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.accent,
         borderRadius: Radius.medium,
     },
-
     uploadButtonText: {
         fontFamily: Fonts.bold,
         fontSize: 11,
         color: Colors.primary,
     },
-
     coverPreview: {
         height: 110,
         width: '100%',
@@ -1630,17 +1555,14 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         backgroundColor: Colors.accent,
     },
-
     coverPreviewImage: {
         width: '100%',
         height: '100%',
     },
-
     coverPreviewFallback: {
         flex: 1,
         backgroundColor: Colors.primaryDark,
     },
-
     coverUploadButton: {
         alignSelf: 'flex-start',
         marginTop: 10,
@@ -1649,18 +1571,15 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.accent,
         borderRadius: Radius.medium,
     },
-
     inputGroup: {
         marginBottom: 16,
     },
-
     inputLabel: {
         fontFamily: Fonts.bold,
         fontSize: 12,
         color: Colors.text,
         marginBottom: 8,
     },
-
     textInput: {
         minHeight: 45,
         borderWidth: 1,
@@ -1674,12 +1593,10 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.background,
         outlineStyle: 'none',
     } as any,
-
     multilineInput: {
         minHeight: 95,
         paddingTop: 12,
     },
-
     modalFooter: {
         flexDirection: 'row',
         justifyContent: 'flex-end',
@@ -1689,26 +1606,22 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: Colors.border,
     },
-
     cancelButton: {
         paddingHorizontal: 18,
         paddingVertical: 13,
         borderRadius: Radius.medium,
         backgroundColor: Colors.background,
     },
-
     cancelButtonText: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.textSecondary,
     },
-
     radioOptions: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: Spacing.md,
     },
-
     radioOption: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1719,12 +1632,10 @@ const styles = StyleSheet.create({
         borderColor: Colors.border,
         borderRadius: Radius.medium,
     },
-
     radioOptionActive: {
         borderColor: Colors.primary,
         backgroundColor: Colors.accent,
     },
-
     radioOuter: {
         width: 18,
         height: 18,
@@ -1734,24 +1645,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-
     radioOuterActive: {
         borderColor: Colors.primary,
     },
-
     radioInner: {
         width: 9,
         height: 9,
         borderRadius: Radius.round,
         backgroundColor: Colors.primary,
     },
-
     radioOptionText: {
         fontFamily: Fonts.regular,
         fontSize: 13,
         color: Colors.text,
     },
-
     saveButton: {
         minWidth: 125,
     },

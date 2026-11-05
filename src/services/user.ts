@@ -72,7 +72,10 @@ export const getUserProfile = async (
         return null;
     }
 
-    return snapshot.data() as UserProfile;
+    return {
+        ...snapshot.data(),
+        uid: snapshot.id,
+    } as UserProfile;
 };
 
 export const updateUserProfile = async (
