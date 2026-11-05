@@ -1121,14 +1121,16 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
 }
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-        minHeight: '100%',
-        backgroundColor: Colors.background,
-    },
-    scroll: {
-        flex: 1,
-    },
+   screen: {
+    flex: 1,
+    minHeight: 0,
+    width: '100%',
+    backgroundColor: Colors.background,
+},
+scroll: {
+    flex: 1,
+    minHeight: 0,
+},
     scrollContent: {
         padding: Spacing.lg,
         alignItems: 'center',
@@ -1406,13 +1408,13 @@ const styles = StyleSheet.create({
         marginTop: 12,
     },
     centerState: {
-        flex: 1,
-        minHeight: 350,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: Spacing.lg,
-        backgroundColor: Colors.background,
-    },
+    flex: 1,
+    minHeight: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+    backgroundColor: Colors.background,
+},
     stateTitle: {
         fontFamily: Fonts.black,
         fontSize: 18,
