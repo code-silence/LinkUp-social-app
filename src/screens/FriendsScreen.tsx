@@ -349,8 +349,8 @@ export default function FriendsScreen({
                         {activeTab === 'Friend Requests'
                             ? 'Wants to connect with you'
                             : activeTab === 'Sent Requests'
-                              ? 'Request pending'
-                              : 'Suggested for you'}
+                                ? 'Request pending'
+                                : 'Suggested for you'}
                     </Text>
 
                     <View style={styles.cardActions}>
