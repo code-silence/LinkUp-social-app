@@ -309,7 +309,7 @@ export default function PostCard({
                     </Text>
                 </Pressable>
 
-                <Pressable onPress={() => setShowComments(value => !value)}>
+                <Pressable onPress={() => setShowComments(true)}>
                     <Text style={styles.countText}>
                         {post.commentCount || 0} comments
                     </Text>
@@ -372,7 +372,7 @@ export default function PostCard({
                 </View>
 
                 <Pressable
-                    onPress={() => setShowComments(value => !value)}
+                    onPress={() => setShowComments(true)}
                     style={styles.actionButton}
                 >
                     <Text style={styles.actionText}>
@@ -381,67 +381,7 @@ export default function PostCard({
                 </Pressable>
             </View>
 
-            {/* Comments */}
-            {showComments && (
-                <View style={styles.commentsSection}>
-                    <View style={styles.commentInputRow}>
-                        <Avatar author={currentUser} size={34} />
 
-                        <TextInput
-                            value={commentText}
-                            onChangeText={setCommentText}
-                            placeholder="Write a comment..."
-                            placeholderTextColor={Colors.textSecondary}
-                            style={styles.commentInput}
-                            multiline
-                            maxLength={1000}
-                        />
-
-                        <Pressable
-                            onPress={handleComment}
-                            disabled={!commentText.trim() || submittingComment}
-                            style={[
-                                styles.sendButton,
-                                (!commentText.trim() || submittingComment) &&
-                                styles.sendButtonDisabled,
-                            ]}
-                        >
-                            {submittingComment ? (
-                                <ActivityIndicator
-                                    size="small"
-                                    color={Colors.surface}
-                                />
-                            ) : (
-                                <Text style={styles.sendButtonText}>
-                                    Send
-                                </Text>
-                            )}
-                        </Pressable>
-                    </View>
-
-                    {comments.map(comment => (
-                        <View key={comment.id} style={styles.commentItem}>
-                            <Avatar author={comment.author} size={34} />
-
-                            <View style={styles.commentBubble}>
-                                <Text style={styles.commentAuthor}>
-                                    {comment.author.name}
-                                </Text>
-
-                                <Text style={styles.commentText}>
-                                    {comment.text}
-                                </Text>
-                            </View>
-                        </View>
-                    ))}
-
-                    {comments.length === 0 && (
-                        <Text style={styles.noComments}>
-                            No comments yet. Start the conversation.
-                        </Text>
-                    )}
-                </View>
-            )}
 
             {/* Full-screen image viewer */}
             <Modal
@@ -501,6 +441,104 @@ export default function PostCard({
                     </Text>
                 </View>
             </Modal>
+
+            {/* Comments Modal */}
+            <Modal
+                visible={showComments}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowComments(false)}
+            >
+                <Pressable
+                    style={styles.commentsOverlay}
+                    onPress={() => setShowComments(false)}
+                >
+                    <Pressable
+                        style={styles.commentsModal}
+                        onPress={event => event.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <View style={styles.commentsHeader}>
+                            <Text style={styles.commentsTitle}>
+                                Comments ({comments.length})
+                            </Text>
+
+                            <Pressable onPress={() => setShowComments(false)}>
+                                <Text style={styles.commentsClose}>✕</Text>
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.divider} />
+
+                        {/* Scrollable comments */}
+                        <ScrollView
+                            style={styles.commentsList}
+                            contentContainerStyle={styles.commentsListContent}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            {comments.length === 0 ? (
+                                <Text style={styles.noComments}>
+                                    No comments yet. Start the conversation.
+                                </Text>
+                            ) : (
+                                comments.map(comment => (
+                                    <View key={comment.id} style={styles.commentItem}>
+                                        <Avatar author={comment.author} size={36} />
+
+                                        <View style={styles.commentBubble}>
+                                            <Text style={styles.commentAuthor}>
+                                                {comment.author.name}
+                                            </Text>
+
+                                            <Text style={styles.commentText}>
+                                                {comment.text}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+
+                        {/* Fixed comment input */}
+                        <View style={styles.commentInputContainer}>
+                            <View style={styles.commentInputRow}>
+                                <Avatar author={currentUser} size={36} />
+
+                                <TextInput
+                                    value={commentText}
+                                    onChangeText={setCommentText}
+                                    placeholder="Write a comment..."
+                                    placeholderTextColor={Colors.textSecondary}
+                                    style={styles.commentInput}
+                                    multiline
+                                    maxLength={1000}
+                                />
+
+                                <Pressable
+                                    onPress={handleComment}
+                                    disabled={!commentText.trim() || submittingComment}
+                                    style={[
+                                        styles.sendButton,
+                                        (!commentText.trim() || submittingComment) &&
+                                        styles.sendButtonDisabled,
+                                    ]}
+                                >
+                                    {submittingComment ? (
+                                        <ActivityIndicator
+                                            size="small"
+                                            color={Colors.surface}
+                                        />
+                                    ) : (
+                                        <Text style={styles.sendButtonText}>Send</Text>
+                                    )}
+                                </Pressable>
+                            </View>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+
             {/* People who reacted */}
             <Modal
                 visible={showReactions}
@@ -735,12 +773,62 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: Colors.text,
     },
-    commentsSection: {
+
+    commentsOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: Spacing.md,
+    },
+
+    commentsModal: {
+        width: '100%',
+        maxWidth: 520,
+        height: '75%',
+        maxHeight: 650,
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.large,
+        overflow: 'hidden',
+    },
+
+    commentsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: Spacing.md,
+    },
+
+    commentsTitle: {
+        fontFamily: Fonts.bold,
+        fontSize: 16,
+        color: Colors.text,
+    },
+
+    commentsClose: {
+        fontSize: 18,
+        color: Colors.textSecondary,
+        paddingHorizontal: Spacing.xs,
+    },
+
+    commentsList: {
+        flex: 1,
+        paddingHorizontal: Spacing.md,
+    },
+
+    commentsListContent: {
+        flexGrow: 1,
+        gap: Spacing.md,
+        paddingVertical: Spacing.md,
+    },
+
+    commentInputContainer: {
         borderTopWidth: 1,
         borderTopColor: Colors.border,
         padding: Spacing.md,
-        gap: Spacing.md,
+        backgroundColor: Colors.surface,
     },
+
     commentInputRow: {
         flexDirection: 'row',
         alignItems: 'center',
