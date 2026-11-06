@@ -1,95 +1,98 @@
-
 import {
     doc,
     getDoc,
     setDoc,
-    serverTimestamp,
+    updateDocs,
+    collection,
+    query,
+    where,
+    getDocs,
+    getFirestore,
 } from 'firebase/firestore';
 
-import { db } from './firebase';
+const db = getFirestore();
 
 export interface UserProfile {
     uid: string;
-
-    // Basic information
     name: string;
     username: string;
     email: string;
-    bio: string;
-    photoURL: string;
-    coverPhotoURL: string;
+    bio?: string;
+    photoURL?: string;
+    coverPhotoURL?: string;
 
-    // Personal information
-    gender: string;
-    birthday: string;
-    relationshipStatus: string;
-    phone: string;
+    gender?: string;
+    birthday?: string;
+    relationshipStatus?: string;
+    phone?: string;
 
-    // Location
-    address: string;
-    city: string;
-    state: string;
-    country: string;
-    hometown: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    hometown?: string;
 
-    // Education
-    college: string;
-    university: string;
-    degree: string;
-    highSchool: string;
+    college?: string;
+    university?: string;
+    degree?: string;
+    highSchool?: string;
 
-    // Work
-    jobTitle: string;
-    workplace: string;
+    jobTitle?: string;
+    workplace?: string;
 
-    // Social links
-    website: string;
-    facebook: string;
-    instagram: string;
-    linkedin: string;
+    website?: string;
+    facebook?: string;
+    instagram?: string;
+    linkedin?: string;
 
-    // Additional information
-    interests: string[];
-    languages: string[];
+    interests?: string[];
+    languages?: string[];
 
-    // Account information
-    friendsCount: number;
-    createdAt?: unknown;
-    updatedAt?: unknown;
+    friendsCount?: number;
 }
 
-export type UserProfileUpdate = Partial<
-    Omit<UserProfile, 'uid' | 'email' | 'friendsCount' | 'createdAt' | 'updatedAt'>
->;
+export type UserProfileUpdate = Partial<UserProfile>;
 
-export const getUserProfile = async (
-    uid: string,
-): Promise<UserProfile | null> => {
-    const profileRef = doc(db, 'users', uid);
-    const snapshot = await getDoc(profileRef);
+/**
+ * Fetch user profile from Firestore and calculate actual accepted friends count dynamically
+ */
+export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
+    try {
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
 
-    if (!snapshot.exists()) {
-        return null;
+        if (!userSnap.exists()) {
+            return null;
+        }
+
+        const userData = userSnap.data() as UserProfile;
+
+        // Fetch actual accepted friends count dynamically from Firebase connections subcollection
+        const connectionsRef = collection(db, 'users', uid, 'connections');
+        const acceptedQuery = query(connectionsRef, where('status', '==', 'accepted'));
+        const acceptedSnap = await getDocs(acceptedQuery);
+        const actualFriendsCount = acceptedSnap.size;
+
+        return {
+            ...userData,
+            uid: userSnap.id,
+            friendsCount: actualFriendsCount, // Always use real-time calculated count from Firestore
+        };
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        throw error;
     }
-
-    return {
-        ...snapshot.data(),
-        uid: snapshot.id,
-    } as UserProfile;
 };
 
-export const updateUserProfile = async (
-    uid: string,
-    data: UserProfileUpdate,
-): Promise<void> => {
-    const profileRef = doc(db, 'users', uid);
-
-    await setDoc(
-        profileRef,
-        {
-            ...data,
-            updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-    );
+/**
+ * Update user profile in Firestore
+ */
+export const updateUserProfile = async (uid: string, data: UserProfileUpdate): Promise<void> => {
+    try {
+        const userRef = doc(db, 'users', uid);
+        await setDoc(userRef, data, { merge: true });
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        throw error;
+    }
 };
