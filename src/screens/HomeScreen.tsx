@@ -242,11 +242,19 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
 
                         <View style={styles.account}>
-                            <Avatar
-                                name={displayUserName}
-                                url={displayPhotoURL}
-                                size={46}
-                            />
+                            <Pressable
+                                onPress={() => {
+                                    setActivePage('Profile');
+                                    setViewingProfileId(null);
+                                    setViewingPostId(null);
+                                }}
+                            >
+                                <Avatar
+                                    name={displayUserName}
+                                    url={displayPhotoURL}
+                                    size={46}
+                                />
+                            </Pressable>
 
                             <View style={styles.accountInfo}>
                                 <Text style={styles.accountName} numberOfLines={1}>
@@ -293,11 +301,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
                     ) : (
                         <Text style={styles.topBarTitle}>
-                            {viewingProfileId 
-                                ? "Viewing Profile" 
-                                : viewingPostId 
-                                ? "Post Details" 
-                                : activePage}
+                            {viewingProfileId
+                                ? "Viewing Profile"
+                                : viewingPostId
+                                    ? "Post Details"
+                                    : activePage}
                         </Text>
                     )}
 
@@ -313,11 +321,19 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             </Pressable>
                         )}
 
-                        <Avatar
-                            name={displayUserName}
-                            url={displayPhotoURL}
-                            size={40}
-                        />
+                        <Pressable
+                            onPress={() => {
+                                setActivePage('Profile');
+                                setViewingProfileId(null);
+                                setViewingPostId(null);
+                            }}
+                        >
+                            <Avatar
+                                name={displayUserName}
+                                url={displayPhotoURL}
+                                size={40}
+                            />
+                        </Pressable>
                     </View>
                 </View>
 
