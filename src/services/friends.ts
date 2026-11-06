@@ -1,369 +1,184 @@
-
 import {
     collection,
     doc,
-    getDoc,
     getDocs,
+    getDoc,
+    setDoc,
+    deleteDoc,
     query,
     where,
-    limit,
-    startAfter,
-    runTransaction,
-    increment,
-    serverTimestamp,
-    QueryDocumentSnapshot,
-    DocumentData,
+    getFirestore,
+    serverTimestamp
 } from 'firebase/firestore';
-
-import { db } from './firebase';
 import { UserProfile } from './user';
+import { sendNotification } from './notifications';
 
-export type ConnectionStatus =
-    | 'pending_sent'
-    | 'pending_received'
-    | 'accepted';
+const db = getFirestore();
 
-const SUGGESTION_LIMIT = 10;
-const FETCH_BATCH_SIZE = 50;
-const CONNECTION_LIMIT = 100;
+export type ConnectionStatus = 'pending_sent' | 'pending_received' | 'accepted';
 
-const getProfilesByIds = async (
-    userIds: string[],
-): Promise<UserProfile[]> => {
-    const uniqueIds = [...new Set(userIds)];
+export interface FriendConnection {
+    uid: string;
+    status: ConnectionStatus;
+    timestamp: any;
+}
 
-    const profiles = await Promise.all(
-        uniqueIds.map(async uid => {
-            const snapshot = await getDoc(doc(db, 'users', uid));
+/**
+ * Fetch all users for suggestions, excluding current user and existing connections
+ */
+export const getSuggestions = async (currentUserId: string): Promise<UserProfile[]> => {
+    try {
+        const connectionsRef = collection(db, 'users', currentUserId, 'connections');
+        const connectionsSnap = await getDocs(connectionsRef);
+        const existingConnectionIds = new Set<string>();
+        connectionsSnap.forEach(docSnap => {
+            existingConnectionIds.add(docSnap.id);
+        });
 
-            if (!snapshot.exists()) return null;
+        const usersRef = collection(db, 'users');
+        const querySnapshot = await getDocs(usersRef);
 
-            return {
-                ...snapshot.data(),
-                uid: snapshot.id,
-            } as UserProfile;
-        }),
-    );
-
-    return profiles.filter(
-        (profile): profile is UserProfile => profile !== null,
-    );
-};
-
-// Returns at most 10 users who have no existing connection.
-export const getSuggestions = async (
-    currentUserId: string,
-): Promise<UserProfile[]> => {
-    const connectionsRef = collection(
-        db,
-        'users',
-        currentUserId,
-        'connections',
-    );
-
-    const connectionsSnapshot = await getDocs(connectionsRef);
-
-    const existingIds = new Set(
-        connectionsSnapshot.docs.map(snapshot => snapshot.id),
-    );
-
-    const usersRef = collection(db, 'users');
-
-    const suggestions: UserProfile[] = [];
-    let lastDocument:
-        | QueryDocumentSnapshot<DocumentData>
-        | undefined;
-
-    while (suggestions.length < SUGGESTION_LIMIT) {
-        const usersQuery = lastDocument
-            ? query(
-                  usersRef,
-                  startAfter(lastDocument),
-                  limit(FETCH_BATCH_SIZE),
-              )
-            : query(usersRef, limit(FETCH_BATCH_SIZE));
-
-        const snapshot = await getDocs(usersQuery);
-
-        if (snapshot.empty) break;
-
-        for (const userDoc of snapshot.docs) {
+        const suggestions: UserProfile[] = [];
+        querySnapshot.forEach((docSnap) => {
+            const userData = { ...docSnap.data(), uid: docSnap.id } as UserProfile;
+            
             if (
-                userDoc.id === currentUserId ||
-                existingIds.has(userDoc.id)
+                userData.uid && 
+                userData.uid !== currentUserId && 
+                !existingConnectionIds.has(userData.uid)
             ) {
-                continue;
+                suggestions.push(userData);
             }
+        });
 
-            suggestions.push({
-                ...userDoc.data(),
-                uid: userDoc.id,
-            } as UserProfile);
-
-            if (suggestions.length >= SUGGESTION_LIMIT) break;
-        }
-
-        lastDocument = snapshot.docs[snapshot.docs.length - 1];
-
-        if (snapshot.docs.length < FETCH_BATCH_SIZE) break;
+        return suggestions;
+    } catch (error) {
+        console.error('Error fetching suggestions:', error);
+        throw error;
     }
-
-    return suggestions;
 };
 
-// Send a friend request.
-export const sendFriendRequest = async (
-    currentUserId: string,
-    targetUserId: string,
-): Promise<void> => {
-    if (
-        !currentUserId ||
-        !targetUserId ||
-        currentUserId === targetUserId
-    ) {
-        throw new Error('Invalid user ID.');
-    }
-
-    const currentRef = doc(
-        db,
-        'users',
-        currentUserId,
-        'connections',
-        targetUserId,
-    );
-
-    const targetRef = doc(
-        db,
-        'users',
-        targetUserId,
-        'connections',
-        currentUserId,
-    );
-
-    await runTransaction(db, async transaction => {
-        const [currentSnap, targetSnap] = await Promise.all([
-            transaction.get(currentRef),
-            transaction.get(targetRef),
-        ]);
-
-        const currentStatus = currentSnap.data()?.status;
-        const targetStatus = targetSnap.data()?.status;
-
-        if (
-            currentStatus === 'accepted' ||
-            targetStatus === 'accepted'
-        ) {
-            throw new Error('You are already friends.');
-        }
-
-        if (currentStatus === 'pending_sent') {
-            throw new Error('You have already sent a request.');
-        }
-
-        if (currentStatus === 'pending_received') {
-            throw new Error(
-                'This user has already sent you a request. Accept it instead.',
-            );
-        }
-
+/**
+ * Send a friend request to a target user
+ */
+export const sendFriendRequest = async (currentUserId: string, targetUserId: string): Promise<void> => {
+    if (!currentUserId || !targetUserId) throw new Error("Missing user ID");
+    try {
         const timestamp = serverTimestamp();
 
-        transaction.set(currentRef, {
+        const currentUserRef = doc(db, 'users', currentUserId, 'connections', targetUserId);
+        await setDoc(currentUserRef, {
             uid: targetUserId,
             status: 'pending_sent',
-            timestamp,
-        });
+            timestamp: timestamp
+        }, { merge: true });
 
-        transaction.set(targetRef, {
+        const targetUserRef = doc(db, 'users', targetUserId, 'connections', currentUserId);
+        await setDoc(targetUserRef, {
             uid: currentUserId,
             status: 'pending_received',
-            timestamp,
-        });
-    });
+            timestamp: timestamp
+        }, { merge: true });
+    } catch (error) {
+        console.error('Error sending friend request:', error);
+        throw error;
+    }
 };
 
-// Accept an incoming friend request.
+/**
+ * Accept a friend request & send a notification to the requester
+ */
 export const acceptFriendRequest = async (
-    currentUserId: string,
-    requesterId: string,
+    currentUserId: string, 
+    requesterId: string, 
+    currentUserProfile?: UserProfile
 ): Promise<void> => {
-    if (
-        !currentUserId ||
-        !requesterId ||
-        currentUserId === requesterId
-    ) {
-        throw new Error('Invalid user ID.');
-    }
-
-    const currentRef = doc(
-        db,
-        'users',
-        currentUserId,
-        'connections',
-        requesterId,
-    );
-
-    const requesterRef = doc(
-        db,
-        'users',
-        requesterId,
-        'connections',
-        currentUserId,
-    );
-
-    const currentProfileRef = doc(db, 'users', currentUserId);
-    const requesterProfileRef = doc(db, 'users', requesterId);
-
-    await runTransaction(db, async transaction => {
-        const [
-            currentSnap,
-            requesterSnap,
-            currentProfileSnap,
-            requesterProfileSnap,
-        ] = await Promise.all([
-            transaction.get(currentRef),
-            transaction.get(requesterRef),
-            transaction.get(currentProfileRef),
-            transaction.get(requesterProfileRef),
-        ]);
-
-        if (
-            currentSnap.data()?.status !== 'pending_received' ||
-            requesterSnap.data()?.status !== 'pending_sent'
-        ) {
-            throw new Error(
-                'This friend request is no longer available.',
-            );
-        }
-
+    if (!currentUserId || !requesterId) throw new Error("Missing user ID");
+    try {
         const timestamp = serverTimestamp();
 
-        transaction.set(currentRef, {
+        const currentUserRef = doc(db, 'users', currentUserId, 'connections', requesterId);
+        await setDoc(currentUserRef, {
             uid: requesterId,
             status: 'accepted',
-            timestamp,
-        });
+            timestamp: timestamp
+        }, { merge: true });
 
-        transaction.set(requesterRef, {
+        const requesterUserRef = doc(db, 'users', requesterId, 'connections', currentUserId);
+        await setDoc(requesterUserRef, {
             uid: currentUserId,
             status: 'accepted',
-            timestamp,
+            timestamp: timestamp
+        }, { merge: true });
+
+        // Send notification to the requester that their request was accepted
+        await sendNotification(requesterId, {
+            senderId: currentUserId,
+            senderName: currentUserProfile?.name || 'Someone',
+            senderPhotoURL: currentUserProfile?.photoURL || '',
+            type: 'friend_request',
+            message: `accepted your friend request. You are now friends.`,
+            postId: '',
+        });
+    } catch (error) {
+        console.error('Error accepting friend request:', error);
+        throw error;
+    }
+};
+
+/**
+ * Remove or decline a connection between users
+ */
+export const removeConnection = async (currentUserId: string, targetUserId: string): Promise<void> => {
+    if (!currentUserId || !targetUserId) throw new Error("Missing user ID");
+    try {
+        const currentUserRef = doc(db, 'users', currentUserId, 'connections', targetUserId);
+        await deleteDoc(currentUserRef);
+
+        const targetUserRef = doc(db, 'users', targetUserId, 'connections', currentUserId);
+        await deleteDoc(targetUserRef);
+    } catch (error) {
+        console.error('Error removing connection:', error);
+        throw error;
+    }
+};
+
+/**
+ * Fetch users based on their connection status
+ */
+export const getUsersByConnectionStatus = async (
+    currentUserId: string, 
+    desiredStatus: ConnectionStatus
+): Promise<UserProfile[]> => {
+    try {
+        const connectionsRef = collection(db, 'users', currentUserId, 'connections');
+        const q = query(connectionsRef, where('status', '==', desiredStatus));
+        const snap = await getDocs(q);
+
+        if (snap.empty) return [];
+
+        const userIds: string[] = [];
+        snap.forEach(docSnap => {
+            const connectionUid = docSnap.data().uid || docSnap.id;
+            if (connectionUid) {
+                userIds.push(connectionUid);
+            }
         });
 
-        if (currentProfileSnap.exists()) {
-            transaction.update(currentProfileRef, {
-                friendsCount: increment(1),
-            });
+        const users: UserProfile[] = [];
+        for (const uid of userIds) {
+            if (!uid) continue;
+            
+            const userRef = doc(db, 'users', uid);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                users.push({ ...userSnap.data(), uid: userSnap.id } as UserProfile);
+            }
         }
 
-        if (requesterProfileSnap.exists()) {
-            transaction.update(requesterProfileRef, {
-                friendsCount: increment(1),
-            });
-        }
-    });
-};
-
-// Decline a request, cancel a sent request, or unfriend.
-export const removeConnection = async (
-    currentUserId: string,
-    targetUserId: string,
-): Promise<void> => {
-    if (
-        !currentUserId ||
-        !targetUserId ||
-        currentUserId === targetUserId
-    ) {
-        throw new Error('Invalid user ID.');
+        return users;
+    } catch (error) {
+        console.error(`Error fetching users with status ${desiredStatus}:`, error);
+        throw error;
     }
-
-    const currentRef = doc(
-        db,
-        'users',
-        currentUserId,
-        'connections',
-        targetUserId,
-    );
-
-    const targetRef = doc(
-        db,
-        'users',
-        targetUserId,
-        'connections',
-        currentUserId,
-    );
-
-    const currentProfileRef = doc(db, 'users', currentUserId);
-    const targetProfileRef = doc(db, 'users', targetUserId);
-
-    await runTransaction(db, async transaction => {
-        const [
-            currentSnap,
-            targetSnap,
-            currentProfileSnap,
-            targetProfileSnap,
-        ] = await Promise.all([
-            transaction.get(currentRef),
-            transaction.get(targetRef),
-            transaction.get(currentProfileRef),
-            transaction.get(targetProfileRef),
-        ]);
-
-        const wasAccepted =
-            currentSnap.data()?.status === 'accepted' ||
-            targetSnap.data()?.status === 'accepted';
-
-        transaction.delete(currentRef);
-        transaction.delete(targetRef);
-
-        if (wasAccepted) {
-            if (currentProfileSnap.exists()) {
-                transaction.update(currentProfileRef, {
-                    friendsCount: increment(-1),
-                });
-            }
-
-            if (targetProfileSnap.exists()) {
-                transaction.update(targetProfileRef, {
-                    friendsCount: increment(-1),
-                });
-            }
-        }
-    });
 };
-
-// Get users by their connection status.
-export const getUsersByConnectionStatus = async (
-    currentUserId: string,
-    desiredStatus: ConnectionStatus,
-): Promise<UserProfile[]> => {
-    const connectionsRef = collection(
-        db,
-        'users',
-        currentUserId,
-        'connections',
-    );
-
-    const connectionsQuery = query(
-        connectionsRef,
-        where('status', '==', desiredStatus),
-        limit(CONNECTION_LIMIT),
-    );
-
-    const snapshot = await getDocs(connectionsQuery);
-
-    const userIds = snapshot.docs.map(
-        connection => connection.data().uid || connection.id,
-    );
-
-    return getProfilesByIds(userIds);
-};
-
-export const getFriends = (uid: string) =>
-    getUsersByConnectionStatus(uid, 'accepted');
-
-export const getIncomingRequests = (uid: string) =>
-    getUsersByConnectionStatus(uid, 'pending_received');
-
-export const getOutgoingRequests = (uid: string) =>
-    getUsersByConnectionStatus(uid, 'pending_sent');

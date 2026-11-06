@@ -111,7 +111,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
         photoURL: globalProfile?.photoURL || user.photoURL || '',
     };
 
-    // Subscribe to feed posts
+    // Subscribe to feed posts in real-time
     useEffect(() => {
         const unsubscribe = subscribeToFeed(
             data => {
@@ -220,7 +220,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
         );
     };
 
-    // Find the specific post when viewing from notification
+    // Find specific post when viewed from notification
     const selectedPost = posts.find(p => p.id === viewingPostId);
 
     return (
@@ -324,6 +324,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 {viewingProfileId ? (
                     <PublicProfileScreen
                         userId={viewingProfileId}
+                        currentUser={user}
                         onBack={() => setViewingProfileId(null)}
                     />
                 ) : viewingPostId ? (
