@@ -11,6 +11,12 @@ import {
 } from 'react-native';
 
 import { UserProfile, getUserProfile } from '../services/user';
+import {
+    Post,
+    PostAuthor,
+    subscribeToUserPosts,
+} from '../services/posts';
+import PostCard from '../components/PostCard';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
 
 interface PublicProfileScreenProps {
@@ -25,6 +31,10 @@ export default function PublicProfileScreen({
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+
+    const [recentPosts, setRecentPosts] = useState<Post[]>([]);
+    const [postsLoading, setPostsLoading] = useState(true);
+    const [postsError, setPostsError] = useState('');
 
     useEffect(() => {
         let isActive = true;
@@ -55,6 +65,27 @@ export default function PublicProfileScreen({
         return () => {
             isActive = false;
         };
+    }, [userId]);
+
+    useEffect(() => {
+        setRecentPosts([]);
+        setPostsLoading(true);
+        setPostsError('');
+
+        const unsubscribe = subscribeToUserPosts(
+            userId,
+            posts => {
+                setRecentPosts(posts);
+                setPostsLoading(false);
+            },
+            err => {
+                console.error('Failed to load public profile posts:', err);
+                setPostsError('Could not load this user’s posts.');
+                setPostsLoading(false);
+            },
+        );
+
+        return unsubscribe;
     }, [userId]);
 
     const displayName =
@@ -115,6 +146,13 @@ export default function PublicProfileScreen({
         );
     }
 
+    const postViewer: PostAuthor = {
+        uid: profile.uid,
+        name: profile.name,
+        username: profile.username,
+        photoURL: profile.photoURL,
+    };
+
     return (
         <ScrollView
             style={styles.container}
@@ -170,9 +208,10 @@ export default function PublicProfileScreen({
             <View style={styles.detailsCard}>
                 <Text style={styles.sectionTitle}>About</Text>
 
-                {renderInfo('Location', [profile.city, profile.country]
-                    .filter(Boolean)
-                    .join(', '))}
+                {renderInfo(
+                    'Location',
+                    [profile.city, profile.country].filter(Boolean).join(', '),
+                )}
                 {renderInfo('Hometown', profile.hometown)}
                 {renderInfo('Education', profile.university)}
                 {renderInfo('College', profile.college)}
@@ -213,6 +252,33 @@ export default function PublicProfileScreen({
                     {renderInfo('LinkedIn', profile.linkedin)}
                 </View>
             ) : null}
+
+            <View style={styles.recentPostsSection}>
+                <Text style={styles.sectionTitle}>Recent Posts</Text>
+
+                {postsLoading ? (
+                    <View style={styles.postsState}>
+                        <ActivityIndicator color={Colors.primary} />
+                        <Text style={styles.statusText}>
+                            Loading posts...
+                        </Text>
+                    </View>
+                ) : postsError ? (
+                    <Text style={styles.postsStateText}>{postsError}</Text>
+                ) : recentPosts.length === 0 ? (
+                    <Text style={styles.postsStateText}>
+                        This user hasn't shared any posts yet.
+                    </Text>
+                ) : (
+                    recentPosts.map(post => (
+                        <PostCard
+                            key={post.id}
+                            post={post}
+                            currentUser={postViewer}
+                        />
+                    ))
+                )}
+            </View>
         </ScrollView>
     );
 }
@@ -396,6 +462,20 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: Colors.border,
     },
-
-
+    recentPostsSection: {
+        marginTop: Spacing.md,
+    },
+    postsState: {
+        alignItems: 'center',
+        padding: Spacing.xl,
+    },
+    postsStateText: {
+        fontFamily: Fonts.regular,
+        fontSize: 14,
+        color: Colors.textSecondary,
+        textAlign: 'center',
+        padding: Spacing.lg,
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.medium,
+    },
 });
