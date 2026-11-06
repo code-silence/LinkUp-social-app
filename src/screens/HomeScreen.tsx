@@ -179,7 +179,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 }}
                 style={
                     mobile
-                        ? styles.mobileNavItem
+                        ? [styles.mobileNavItem, isActive && styles.mobileNavItemActive]
                         : [
                             styles.navItem,
                             isActive && styles.navItemActive,
@@ -242,19 +242,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
 
                         <View style={styles.account}>
-                            <Pressable
-                                onPress={() => {
-                                    setActivePage('Profile');
-                                    setViewingProfileId(null);
-                                    setViewingPostId(null);
-                                }}
-                            >
-                                <Avatar
-                                    name={displayUserName}
-                                    url={displayPhotoURL}
-                                    size={46}
-                                />
-                            </Pressable>
+                            <Avatar
+                                name={displayUserName}
+                                url={displayPhotoURL}
+                                size={46}
+                            />
 
                             <View style={styles.accountInfo}>
                                 <Text style={styles.accountName} numberOfLines={1}>
@@ -301,11 +293,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
                     ) : (
                         <Text style={styles.topBarTitle}>
-                            {viewingProfileId
-                                ? "Viewing Profile"
-                                : viewingPostId
-                                    ? "Post Details"
-                                    : activePage}
+                            {viewingProfileId 
+                                ? "Viewing Profile" 
+                                : viewingPostId 
+                                ? "Post Details" 
+                                : activePage}
                         </Text>
                     )}
 
@@ -321,19 +313,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             </Pressable>
                         )}
 
-                        <Pressable
-                            onPress={() => {
-                                setActivePage('Profile');
-                                setViewingProfileId(null);
-                                setViewingPostId(null);
-                            }}
-                        >
-                            <Avatar
-                                name={displayUserName}
-                                url={displayPhotoURL}
-                                size={40}
-                            />
-                        </Pressable>
+                        <Avatar
+                            name={displayUserName}
+                            url={displayPhotoURL}
+                            size={40}
+                        />
                     </View>
                 </View>
 
@@ -910,6 +894,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 3,
+        paddingVertical: 6,
+        borderRadius: Radius.medium,
+    },
+    mobileNavItemActive: {
+        backgroundColor: Colors.accent,
     },
     mobileNavIcon: {
         fontFamily: Fonts.bold,
