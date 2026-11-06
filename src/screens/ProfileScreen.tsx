@@ -14,6 +14,13 @@ import {
     View,
 } from 'react-native';
 
+import PostCard from '../components/PostCard';
+import {
+    Post,
+    PostAuthor,
+    subscribeToUserPosts,
+} from '../services/posts';
+
 import { User } from 'firebase/auth';
 
 import {
@@ -90,133 +97,133 @@ const PROFILE_FIELDS: {
     title: string;
     fields: Field[];
 }[] = [
-    {
-        title: 'Basic information',
-        fields: [
-            {
-                key: 'name',
-                label: 'Full name',
-                placeholder: 'Your name',
-            },
-            {
-                key: 'username',
-                label: 'Username',
-                placeholder: 'Choose a username',
-            },
-            {
-                key: 'bio',
-                label: 'Bio',
-                placeholder: 'Tell people something about yourself',
-                multiline: true,
-            },
-        ],
-    },
-    {
-        title: 'Personal information',
-        fields: [
-            {
-                key: 'phone',
-                label: 'Phone number',
-                placeholder: 'Your phone number',
-            },
-        ],
-    },
-    {
-        title: 'Location',
-        fields: [
-            {
-                key: 'address',
-                label: 'Address',
-                placeholder: 'Your address',
-            },
-            {
-                key: 'city',
-                label: 'City',
-                placeholder: 'Your city',
-            },
-            {
-                key: 'state',
-                label: 'State / Division',
-                placeholder: 'Your state or division',
-            },
-            {
-                key: 'country',
-                label: 'Country',
-                placeholder: 'Your country',
-            },
-            {
-                key: 'hometown',
-                label: 'Hometown',
-                placeholder: 'Your hometown',
-            },
-        ],
-    },
-    {
-        title: 'Education',
-        fields: [
-            {
-                key: 'college',
-                label: 'College',
-                placeholder: 'Your college',
-            },
-            {
-                key: 'university',
-                label: 'University',
-                placeholder: 'Your university',
-            },
-            {
-                key: 'degree',
-                label: 'Degree',
-                placeholder: 'Your degree',
-            },
-            {
-                key: 'highSchool',
-                label: 'High school',
-                placeholder: 'Your high school',
-            },
-        ],
-    },
-    {
-        title: 'Work',
-        fields: [
-            {
-                key: 'jobTitle',
-                label: 'Job title',
-                placeholder: 'Your job title',
-            },
-            {
-                key: 'workplace',
-                label: 'Workplace',
-                placeholder: 'Where do you work?',
-            },
-        ],
-    },
-    {
-        title: 'Social links',
-        fields: [
-            {
-                key: 'website',
-                label: 'Website',
-                placeholder: 'https://example.com',
-            },
-            {
-                key: 'facebook',
-                label: 'Facebook',
-                placeholder: 'Facebook profile URL',
-            },
-            {
-                key: 'instagram',
-                label: 'Instagram',
-                placeholder: 'Instagram profile URL',
-            },
-            {
-                key: 'linkedin',
-                label: 'LinkedIn',
-                placeholder: 'LinkedIn profile URL',
-            },
-        ],
-    },
-];
+        {
+            title: 'Basic information',
+            fields: [
+                {
+                    key: 'name',
+                    label: 'Full name',
+                    placeholder: 'Your name',
+                },
+                {
+                    key: 'username',
+                    label: 'Username',
+                    placeholder: 'Choose a username',
+                },
+                {
+                    key: 'bio',
+                    label: 'Bio',
+                    placeholder: 'Tell people something about yourself',
+                    multiline: true,
+                },
+            ],
+        },
+        {
+            title: 'Personal information',
+            fields: [
+                {
+                    key: 'phone',
+                    label: 'Phone number',
+                    placeholder: 'Your phone number',
+                },
+            ],
+        },
+        {
+            title: 'Location',
+            fields: [
+                {
+                    key: 'address',
+                    label: 'Address',
+                    placeholder: 'Your address',
+                },
+                {
+                    key: 'city',
+                    label: 'City',
+                    placeholder: 'Your city',
+                },
+                {
+                    key: 'state',
+                    label: 'State / Division',
+                    placeholder: 'Your state or division',
+                },
+                {
+                    key: 'country',
+                    label: 'Country',
+                    placeholder: 'Your country',
+                },
+                {
+                    key: 'hometown',
+                    label: 'Hometown',
+                    placeholder: 'Your hometown',
+                },
+            ],
+        },
+        {
+            title: 'Education',
+            fields: [
+                {
+                    key: 'college',
+                    label: 'College',
+                    placeholder: 'Your college',
+                },
+                {
+                    key: 'university',
+                    label: 'University',
+                    placeholder: 'Your university',
+                },
+                {
+                    key: 'degree',
+                    label: 'Degree',
+                    placeholder: 'Your degree',
+                },
+                {
+                    key: 'highSchool',
+                    label: 'High school',
+                    placeholder: 'Your high school',
+                },
+            ],
+        },
+        {
+            title: 'Work',
+            fields: [
+                {
+                    key: 'jobTitle',
+                    label: 'Job title',
+                    placeholder: 'Your job title',
+                },
+                {
+                    key: 'workplace',
+                    label: 'Workplace',
+                    placeholder: 'Where do you work?',
+                },
+            ],
+        },
+        {
+            title: 'Social links',
+            fields: [
+                {
+                    key: 'website',
+                    label: 'Website',
+                    placeholder: 'https://example.com',
+                },
+                {
+                    key: 'facebook',
+                    label: 'Facebook',
+                    placeholder: 'Facebook profile URL',
+                },
+                {
+                    key: 'instagram',
+                    label: 'Instagram',
+                    placeholder: 'Instagram profile URL',
+                },
+                {
+                    key: 'linkedin',
+                    label: 'LinkedIn',
+                    placeholder: 'LinkedIn profile URL',
+                },
+            ],
+        },
+    ];
 
 function Avatar({
     name,
@@ -286,6 +293,10 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
     const [interestsInput, setInterestsInput] = useState('');
     const [languagesInput, setLanguagesInput] = useState('');
 
+    const [recentPosts, setRecentPosts] = useState<Post[]>([]);
+    const [postsLoading, setPostsLoading] = useState(true);
+    const [postsError, setPostsError] = useState('');
+
     const loadProfile = useCallback(async () => {
         setLoading(true);
         setError('');
@@ -317,6 +328,28 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
     useEffect(() => {
         loadProfile();
     }, [loadProfile]);
+
+    useEffect(() => {
+        if (!profile?.uid) return;
+
+        setPostsLoading(true);
+        setPostsError('');
+
+        const unsubscribe = subscribeToUserPosts(
+            profile.uid,
+            posts => {
+                setRecentPosts(posts);
+                setPostsLoading(false);
+            },
+            error => {
+                console.error('Failed to load profile posts:', error);
+                setPostsError('Could not load your posts.');
+                setPostsLoading(false);
+            },
+        );
+
+        return unsubscribe;
+    }, [profile?.uid]);
 
     const openEditProfile = () => {
         if (!profile) return;
@@ -462,7 +495,7 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
             };
 
             setProfile(newlyUpdatedProfile);
-            
+
             // Sync with global HomeScreen state to update avatars everywhere instantly
             if (onProfileUpdate) {
                 onProfileUpdate(newlyUpdatedProfile);
@@ -788,6 +821,39 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
                                 </Text>
                             </Pressable>
                         </View>
+                    </View>
+
+                    {/* Recent Posts */}
+                    <View style={styles.recentPostsSection}>
+                        <Text style={styles.sectionTitle}>Recent Posts</Text>
+
+                        {postsLoading ? (
+                            <View style={styles.postsState}>
+                                <ActivityIndicator color={Colors.primary} />
+                                <Text style={styles.mutedText}>Loading posts...</Text>
+                            </View>
+                        ) : postsError ? (
+                            <Text style={styles.errorMessage}>{postsError}</Text>
+                        ) : recentPosts.length === 0 ? (
+                            <View style={styles.postsState}>
+                                <Text style={styles.mutedText}>
+                                    You haven't shared any posts yet.
+                                </Text>
+                            </View>
+                        ) : (
+                            recentPosts.map(post => (
+                                <PostCard
+                                    key={post.id}
+                                    post={post}
+                                    currentUser={{
+                                        uid: profile.uid,
+                                        name: profile.name,
+                                        username: profile.username,
+                                        photoURL: profile.photoURL,
+                                    } satisfies PostAuthor}
+                                />
+                            ))
+                        )}
                     </View>
 
                     {notice ? (
@@ -1121,16 +1187,16 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
 }
 
 const styles = StyleSheet.create({
-   screen: {
-    flex: 1,
-    minHeight: 0,
-    width: '100%',
-    backgroundColor: Colors.background,
-},
-scroll: {
-    flex: 1,
-    minHeight: 0,
-},
+    screen: {
+        flex: 1,
+        minHeight: 0,
+        width: '100%',
+        backgroundColor: Colors.background,
+    },
+    scroll: {
+        flex: 1,
+        minHeight: 0,
+    },
     scrollContent: {
         padding: Spacing.lg,
         alignItems: 'center',
@@ -1408,13 +1474,13 @@ scroll: {
         marginTop: 12,
     },
     centerState: {
-    flex: 1,
-    minHeight: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.lg,
-    backgroundColor: Colors.background,
-},
+        flex: 1,
+        minHeight: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: Spacing.lg,
+        backgroundColor: Colors.background,
+    },
     stateTitle: {
         fontFamily: Fonts.black,
         fontSize: 18,
@@ -1663,5 +1729,20 @@ scroll: {
     },
     saveButton: {
         minWidth: 125,
+    },
+    recentPostsSection: {
+        marginTop: Spacing.lg,
+        gap: Spacing.md,
+    },
+
+    postsState: {
+        backgroundColor: Colors.surface,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        borderRadius: Radius.large,
+        padding: Spacing.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.sm,
     },
 });
