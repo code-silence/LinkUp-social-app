@@ -12,7 +12,7 @@ import {
     useWindowDimensions,
 } from 'react-native';
 
-import { Colors, Radius, Spacing } from '../theme';
+import { Colors, Radius,} from '../theme';
 import { loginUser, resetPassword } from '../services/auth';
 
 import logo from '../assets/logo.png';
