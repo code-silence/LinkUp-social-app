@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import {
     View,
@@ -18,17 +17,21 @@ import {
 } from '../services/posts';
 import PostCard from '../components/PostCard';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
+import { User } from 'firebase/auth';
 
 interface PublicProfileScreenProps {
     userId: string;
+    currentUser: User;
     onBack: () => void;
 }
 
 export default function PublicProfileScreen({
     userId,
+    currentUser,
     onBack,
 }: PublicProfileScreenProps) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [loggedInUserProfile, setLoggedInUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -36,18 +39,23 @@ export default function PublicProfileScreen({
     const [postsLoading, setPostsLoading] = useState(true);
     const [postsError, setPostsError] = useState('');
 
+    // Fetch public profile data and logged-in user profile data for correct avatar sync
     useEffect(() => {
         let isActive = true;
 
-        const loadProfile = async () => {
+        const loadData = async () => {
             setLoading(true);
             setError('');
 
             try {
-                const data = await getUserProfile(userId);
+                const [targetData, loggedInData] = await Promise.all([
+                    getUserProfile(userId),
+                    getUserProfile(currentUser.uid),
+                ]);
 
                 if (isActive) {
-                    setProfile(data);
+                    setProfile(targetData);
+                    setLoggedInUserProfile(loggedInData);
                 }
             } catch (err) {
                 console.error('Public profile error:', err);
@@ -60,13 +68,14 @@ export default function PublicProfileScreen({
             }
         };
 
-        loadProfile();
+        loadData();
 
         return () => {
             isActive = false;
         };
-    }, [userId]);
+    }, [userId, currentUser.uid]);
 
+    // Subscribe to posts of the visited profile user
     useEffect(() => {
         setRecentPosts([]);
         setPostsLoading(true);
@@ -146,11 +155,12 @@ export default function PublicProfileScreen({
         );
     }
 
+    // Construct the active logged-in user author object with correct Firestore profile data
     const postViewer: PostAuthor = {
-        uid: profile.uid,
-        name: profile.name,
-        username: profile.username,
-        photoURL: profile.photoURL,
+        uid: currentUser.uid,
+        name: loggedInUserProfile?.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
+        username: loggedInUserProfile?.username || '',
+        photoURL: loggedInUserProfile?.photoURL || currentUser.photoURL || '',
     };
 
     return (

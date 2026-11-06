@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 
 import { User } from 'firebase/auth';
-import { UserProfile } from '../services/user';
+import { UserProfile, getUserProfile } from '../services/user';
 import {
     getSuggestions,
     getUsersByConnectionStatus,
@@ -60,8 +60,16 @@ export default function FriendsScreen({
     const [requests, setRequests] = useState<UserProfile[]>([]);
     const [sentRequests, setSentRequests] = useState<UserProfile[]>([]);
     const [friends, setFriends] = useState<UserProfile[]>([]);
+    const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
 
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+    // Fetch current user profile to pass when accepting requests
+    useEffect(() => {
+        getUserProfile(user.uid)
+            .then(profile => setCurrentUserProfile(profile))
+            .catch(err => console.error('Error loading current user profile:', err));
+    }, [user.uid]);
 
     const showAlert = (title: string, message: string) => {
         if (Platform.OS === 'web') {
@@ -84,27 +92,19 @@ export default function FriendsScreen({
         setLoading(true);
 
         try {
+            // Always fetch friend requests count/list so the badge is updated
+            const pendingRequests = await getUsersByConnectionStatus(user.uid, 'pending_received');
+            setRequests(pendingRequests);
+
             if (activeTab === 'Suggestions') {
                 const data = await getSuggestions(user.uid);
                 setSuggestions(data);
-            } else {
-                const statusByTab: Record<
-                    Exclude<TabType, 'Suggestions'>,
-                    ConnectionStatus
-                > = {
-                    'Friend Requests': 'pending_received',
-                    'Sent Requests': 'pending_sent',
-                    'Your Friends': 'accepted',
-                };
-
-                const data = await getUsersByConnectionStatus(
-                    user.uid,
-                    statusByTab[activeTab],
-                );
-
-                if (activeTab === 'Friend Requests') setRequests(data);
-                if (activeTab === 'Sent Requests') setSentRequests(data);
-                if (activeTab === 'Your Friends') setFriends(data);
+            } else if (activeTab === 'Sent Requests') {
+                const data = await getUsersByConnectionStatus(user.uid, 'pending_sent');
+                setSentRequests(data);
+            } else if (activeTab === 'Your Friends') {
+                const data = await getUsersByConnectionStatus(user.uid, 'accepted');
+                setFriends(data);
             }
         } catch (error) {
             console.error('Error loading friend data:', error);
@@ -149,7 +149,7 @@ export default function FriendsScreen({
         setActionLoading(profile.uid);
 
         try {
-            await acceptFriendRequest(user.uid, profile.uid);
+            await acceptFriendRequest(user.uid, profile.uid, currentUserProfile || undefined);
 
             setRequests(previous =>
                 previous.filter(item => item.uid !== profile.uid),
@@ -249,7 +249,6 @@ export default function FriendsScreen({
         );
     };
 
-    // Render list item specifically for "Your Friends" tab
     const renderFriendListItem = (profile: UserProfile) => {
         const isProcessing = actionLoading === profile.uid;
         const displayName = getDisplayName(profile);
@@ -300,7 +299,6 @@ export default function FriendsScreen({
     };
 
     const renderCard = (profile: UserProfile) => {
-        // If active tab is "Your Friends", use the clean list layout
         if (activeTab === 'Your Friends') {
             return renderFriendListItem(profile);
         }
@@ -456,28 +454,44 @@ export default function FriendsScreen({
                 <Text style={styles.sidebarTitle}>Friends</Text>
 
                 <View style={styles.tabList}>
-                    {TABS.map(tab => (
-                        <Pressable
-                            key={tab}
-                            style={[
-                                styles.menuItem,
-                                activeTab === tab && styles.menuItemActive,
-                            ]}
-                            onPress={() => {
-                                setActiveTab(tab);
-                                setSearchQuery('');
-                            }}
-                        >
-                            <Text
+                    {TABS.map(tab => {
+                        const isRequestsTab = tab === 'Friend Requests';
+                        const badgeCount = isRequestsTab ? requests.length : 0;
+
+                        return (
+                            <Pressable
+                                key={tab}
                                 style={[
-                                    styles.menuText,
-                                    activeTab === tab && styles.menuTextActive,
+                                    styles.menuItem,
+                                    activeTab === tab && styles.menuItemActive,
                                 ]}
+                                onPress={() => {
+                                    setActiveTab(tab);
+                                    setSearchQuery('');
+                                }}
                             >
-                                {tab}
-                            </Text>
-                        </Pressable>
-                    ))}
+                                <View style={styles.tabItemRow}>
+                                    <Text
+                                        style={[
+                                            styles.menuText,
+                                            activeTab === tab && styles.menuTextActive,
+                                        ]}
+                                    >
+                                        {tab}
+                                    </Text>
+
+                                    {/* Friend Request Badge */}
+                                    {isRequestsTab && badgeCount > 0 && (
+                                        <View style={styles.badgeContainer}>
+                                            <Text style={styles.badgeText}>
+                                                {badgeCount}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </Pressable>
+                        );
+                    })}
                 </View>
             </View>
 
@@ -629,6 +643,11 @@ const styles = StyleSheet.create({
     menuItemActive: {
         backgroundColor: Colors.accent,
     },
+    tabItemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
     menuText: {
         fontFamily: Fonts.bold,
         fontSize: 14,
@@ -636,6 +655,20 @@ const styles = StyleSheet.create({
     },
     menuTextActive: {
         color: Colors.primary,
+    },
+    badgeContainer: {
+        backgroundColor: Colors.danger,
+        borderRadius: Radius.round,
+        minWidth: 20,
+        height: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 5,
+    },
+    badgeText: {
+        fontFamily: Fonts.bold,
+        fontSize: 11,
+        color: '#FFFFFF',
     },
     mainContent: {
         flex: 1,

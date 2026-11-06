@@ -1,36 +1,30 @@
-
 import {
-    addDoc,
     collection,
     doc,
-    increment,
-    limit,
-    onSnapshot,
-    orderBy,
-    query,
-    runTransaction,
-    serverTimestamp,
     setDoc,
-    getDoc,
+    addDoc,
+    deleteDoc,
+    query,
+    orderBy,
+    onSnapshot,
+    serverTimestamp,
+    getFirestore,
+    getDocs,
     where,
+    increment,
+    updateDoc,
 } from 'firebase/firestore';
+import { sendNotification } from './notifications';
 
-import { db } from './firebase';
+const db = getFirestore();
 
-// -------------------- TYPES --------------------
-
-export type ReactionType =
-    | 'love'
-    | 'haha'
-    | 'angry'
-    | 'clap'
-    | 'sad';
+export type ReactionType = 'love' | 'haha' | 'angry' | 'wow' | 'sad' | 'like';
 
 export interface PostAuthor {
     uid: string;
     name: string;
     username: string;
-    photoURL: string;
+    photoURL?: string;
 }
 
 export interface Post {
@@ -38,332 +32,18 @@ export interface Post {
     authorId: string;
     author: PostAuthor;
     text: string;
-    imageURL: string;
-    reactionCounts: Record<ReactionType, number>;
-    commentCount: number;
-    createdAt?: unknown;
-    updatedAt?: unknown;
+    imageURL?: string;
+    createdAt: any;
+    reactionCounts?: Partial<Record<ReactionType, number>>;
+    commentCount?: number;
 }
 
 export interface PostComment {
     id: string;
-    postId: string;
     author: PostAuthor;
     text: string;
-    createdAt?: unknown;
+    createdAt: any;
 }
-
-export interface PostReaction {
-    uid: string;
-    type: ReactionType;
-    author?: PostAuthor;
-    createdAt?: unknown;
-    updatedAt?: unknown;
-}
-
-export interface PostNotification {
-    id: string;
-    type: 'reaction' | 'comment';
-    postId: string;
-    actor: PostAuthor;
-    reaction?: ReactionType;
-    message: string;
-    isRead: boolean;
-    createdAt?: unknown;
-}
-
-const INITIAL_REACTION_COUNTS: Record<ReactionType, number> = {
-    love: 0,
-    haha: 0,
-    angry: 0,
-    clap: 0,
-    sad: 0,
-};
-
-// -------------------- CREATE POST --------------------
-
-export const createPost = async (
-    author: PostAuthor,
-    text: string,
-    imageURL = '',
-): Promise<string> => {
-    const trimmedText = text.trim();
-
-    if (!trimmedText && !imageURL) {
-        throw new Error('Write something or select an image before posting.');
-    }
-
-    const postRef = await addDoc(collection(db, 'posts'), {
-        authorId: author.uid,
-        author,
-        text: trimmedText,
-        imageURL,
-        reactionCounts: INITIAL_REACTION_COUNTS,
-        commentCount: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
-
-    return postRef.id;
-};
-
-// -------------------- FEED SUBSCRIPTION --------------------
-
-export const subscribeToFeed = (
-    callback: (posts: Post[]) => void,
-    onError?: (error: Error) => void,
-) => {
-    const postsQuery = query(
-        collection(db, 'posts'),
-        orderBy('createdAt', 'desc'),
-        limit(30),
-    );
-
-    return onSnapshot(
-        postsQuery,
-        snapshot => {
-            const posts = snapshot.docs.map(
-                item => ({
-                    id: item.id,
-                    ...item.data(),
-                }) as Post,
-            );
-
-            callback(posts);
-        },
-        error => onError?.(error),
-    );
-};
-
-// -------------------- PROFILE POSTS --------------------
-
-export const subscribeToUserPosts = (
-    uid: string,
-    callback: (posts: Post[]) => void,
-    onError?: (error: Error) => void,
-) => {
-    const postsQuery = query(
-        collection(db, 'posts'),
-        where('authorId', '==', uid),
-        orderBy('createdAt', 'desc'),
-        limit(10),
-    );
-
-    return onSnapshot(
-        postsQuery,
-        snapshot => {
-            const posts = snapshot.docs.map(
-                item => ({
-                    id: item.id,
-                    ...item.data(),
-                }) as Post,
-            );
-
-            callback(posts);
-        },
-        error => onError?.(error),
-    );
-};
-
-// -------------------- REACTIONS --------------------
-
-export const setPostReaction = async (
-    postId: string,
-    authorId: string,
-    actor: PostAuthor,
-    reaction: ReactionType,
-): Promise<void> => {
-    const postRef = doc(db, 'posts', postId);
-    const reactionRef = doc(
-        db,
-        'posts',
-        postId,
-        'reactions',
-        actor.uid,
-    );
-
-    await runTransaction(db, async transaction => {
-        const postSnapshot = await transaction.get(postRef);
-        const reactionSnapshot = await transaction.get(reactionRef);
-
-        if (!postSnapshot.exists()) {
-            throw new Error('This post no longer exists.');
-        }
-
-        const existingReaction = reactionSnapshot.exists()
-            ? reactionSnapshot.data() as PostReaction
-            : null;
-
-        // Tapping the same reaction removes it.
-        if (existingReaction?.type === reaction) {
-            transaction.delete(reactionRef);
-
-            transaction.update(postRef, {
-                [`reactionCounts.${reaction}`]: increment(-1),
-                updatedAt: serverTimestamp(),
-            });
-
-            return;
-        }
-
-        const updates: Record<string, unknown> = {
-            [`reactionCounts.${reaction}`]: increment(1),
-            updatedAt: serverTimestamp(),
-        };
-
-        // Changing a reaction decrements the previous one.
-        if (existingReaction) {
-            updates[`reactionCounts.${existingReaction.type}`] =
-                increment(-1);
-        }
-
-        transaction.set(reactionRef, {
-            uid: actor.uid,
-            type: reaction,
-            author: actor,
-            createdAt: existingReaction?.createdAt || serverTimestamp(),
-            updatedAt: serverTimestamp(),
-        });
-
-        transaction.update(postRef, updates);
-
-        // Don't notify users about their own reactions.
-        if (authorId !== actor.uid) {
-            const notificationRef = doc(
-                collection(db, 'users', authorId, 'notifications'),
-            );
-
-            transaction.set(notificationRef, {
-                type: 'reaction',
-                postId,
-                actor,
-                reaction,
-                message: `${actor.name} reacted to your post.`,
-                isRead: false,
-                createdAt: serverTimestamp(),
-            });
-        }
-    });
-};
-
-// -------------------- USER'S REACTION --------------------
-
-export const subscribeToUserReaction = (
-    postId: string,
-    uid: string,
-    callback: (reaction: ReactionType | null) => void,
-) => {
-    const reactionRef = doc(
-        db,
-        'posts',
-        postId,
-        'reactions',
-        uid,
-    );
-
-    return onSnapshot(reactionRef, snapshot => {
-        if (!snapshot.exists()) {
-            callback(null);
-            return;
-        }
-
-        callback(snapshot.data().type as ReactionType);
-    });
-};
-
-// -------------------- COMMENTS --------------------
-
-export const addPostComment = async (
-    postId: string,
-    author: PostAuthor,
-    text: string,
-): Promise<string> => {
-    const trimmedText = text.trim();
-
-    if (!trimmedText) {
-        throw new Error('Comment cannot be empty.');
-    }
-
-    const postRef = doc(db, 'posts', postId);
-    const commentRef = doc(
-        collection(db, 'posts', postId, 'comments'),
-    );
-
-    await runTransaction(db, async transaction => {
-        const postSnapshot = await transaction.get(postRef);
-
-        if (!postSnapshot.exists()) {
-            throw new Error('This post no longer exists.');
-        }
-
-        const post = postSnapshot.data();
-
-        transaction.set(commentRef, {
-            postId,
-            author,
-            text: trimmedText,
-            createdAt: serverTimestamp(),
-        });
-
-        transaction.update(postRef, {
-            commentCount: increment(1),
-            updatedAt: serverTimestamp(),
-        });
-
-        // Don't notify users about their own comments.
-        if (post.authorId !== author.uid) {
-            const notificationRef = doc(
-                collection(
-                    db,
-                    'users',
-                    post.authorId,
-                    'notifications',
-                ),
-            );
-
-            transaction.set(notificationRef, {
-                type: 'comment',
-                postId,
-                actor: author,
-                message: `${author.name} commented on your post.`,
-                isRead: false,
-                createdAt: serverTimestamp(),
-            });
-        }
-    });
-
-    return commentRef.id;
-};
-
-// -------------------- COMMENT SUBSCRIPTION --------------------
-
-export const subscribeToPostComments = (
-    postId: string,
-    callback: (comments: PostComment[]) => void,
-    onError?: (error: Error) => void,
-) => {
-    const commentsQuery = query(
-        collection(db, 'posts', postId, 'comments'),
-        orderBy('createdAt', 'asc'),
-        limit(100),
-    );
-
-    return onSnapshot(
-        commentsQuery,
-        snapshot => {
-            const comments = snapshot.docs.map(
-                item => ({
-                    id: item.id,
-                    postId,
-                    ...item.data(),
-                }) as PostComment,
-            );
-
-            callback(comments);
-        },
-        error => onError?.(error),
-    );
-};
 
 export interface PostReactionWithAuthor {
     uid: string;
@@ -371,66 +51,244 @@ export interface PostReactionWithAuthor {
     author: PostAuthor;
 }
 
+/**
+ * Create a new post in Firestore
+ */
+export const createPost = async (
+    author: PostAuthor,
+    text: string,
+    imageURL?: string
+): Promise<string> => {
+    try {
+        const postRef = doc(collection(db, 'posts'));
+        await setDoc(postRef, {
+            authorId: author.uid,
+            author,
+            text,
+            imageURL: imageURL || '',
+            createdAt: serverTimestamp(),
+            reactionCounts: {},
+            commentCount: 0,
+        });
+        return postRef.id;
+    } catch (error) {
+        console.error('Error creating post:', error);
+        throw error;
+    }
+};
+
+/**
+ * Subscribe to global feed posts in real-time
+ */
+export const subscribeToFeed = (
+    onUpdate: (posts: Post[]) => void,
+    onError: (error: Error) => void
+) => {
+    const postsRef = collection(db, 'posts');
+    const q = query(postsRef, orderBy('createdAt', 'desc'));
+
+    return onSnapshot(
+        q,
+        snapshot => {
+            const list: Post[] = [];
+            snapshot.forEach(docSnap => {
+                list.push({
+                    id: docSnap.id,
+                    ...docSnap.data(),
+                } as Post);
+            });
+            onUpdate(list);
+        },
+        error => onError(error)
+    );
+};
+
+/**
+ * Subscribe to posts created by a specific user
+ */
+export const subscribeToUserPosts = (
+    userId: string,
+    onUpdate: (posts: Post[]) => void,
+    onError: (error: Error) => void
+) => {
+    const postsRef = collection(db, 'posts');
+    const q = query(postsRef, where('authorId', '==', userId), orderBy('createdAt', 'desc'));
+
+    return onSnapshot(
+        q,
+        snapshot => {
+            const list: Post[] = [];
+            snapshot.forEach(docSnap => {
+                list.push({
+                    id: docSnap.id,
+                    ...docSnap.data(),
+                } as Post);
+            });
+            onUpdate(list);
+        },
+        error => onError(error)
+    );
+};
+
+/**
+ * Set or update a reaction on a post & trigger notification with reaction type
+ */
+export const setPostReaction = async (
+    postId: string,
+    postAuthorId: string,
+    currentUser: PostAuthor,
+    type: ReactionType
+): Promise<void> => {
+    try {
+        const reactionRef = doc(db, 'posts', postId, 'reactions', currentUser.uid);
+        const postRef = doc(db, 'posts', postId);
+
+        const oldReactionSnap = await getDocs(
+            query(collection(db, 'posts', postId, 'reactions'), where('uid', '==', currentUser.uid))
+        );
+
+        let previousType: ReactionType | null = null;
+        if (!oldReactionSnap.empty) {
+            previousType = oldReactionSnap.docs[0].data().type as ReactionType;
+        }
+
+        if (previousType === type) {
+            await deleteDoc(reactionRef);
+            await updateDoc(postRef, {
+                [`reactionCounts.${type}`]: increment(-1),
+            });
+        } else {
+            await setDoc(reactionRef, {
+                uid: currentUser.uid,
+                type,
+                author: currentUser,
+            });
+
+            const updates: any = { [`reactionCounts.${type}`]: increment(1) };
+            if (previousType) {
+                updates[`reactionCounts.${previousType}`] = increment(-1);
+            }
+            await updateDoc(postRef, updates);
+
+            // Map reaction type to friendly display label
+            const reactionLabels: Record<ReactionType, string> = {
+                love: 'Love 💖',
+                haha: 'Haha 😂',
+                angry: 'Angry 😡',
+                wow: 'Wow 😮',
+                sad: 'Sad 😢',
+                like: 'Like 👍',
+            };
+
+            const reactionText = reactionLabels[type] || type;
+
+            // Send notification with specific reaction type to post owner
+            await sendNotification(postAuthorId, {
+                senderId: currentUser.uid,
+                senderName: currentUser.name,
+                senderPhotoURL: currentUser.photoURL || '',
+                type: 'like',
+                message: `reacted with ${reactionText} to your post.`,
+                postId: postId,
+            });
+        }
+    } catch (error) {
+        console.error('Error setting reaction:', error);
+        throw error;
+    }
+};
+
+export const subscribeToUserReaction = (
+    postId: string,
+    userId: string,
+    onUpdate: (type: ReactionType | null) => void
+) => {
+    const reactionRef = doc(db, 'posts', postId, 'reactions', userId);
+    return onSnapshot(reactionRef, docSnap => {
+        if (docSnap.exists()) {
+            onUpdate(docSnap.data().type as ReactionType);
+        } else {
+            onUpdate(null);
+        }
+    });
+};
+
 export const subscribeToPostReactions = (
     postId: string,
-    callback: (reactions: PostReactionWithAuthor[]) => void,
-    onError?: (error: Error) => void,
+    onUpdate: (reactions: PostReactionWithAuthor[]) => void,
+    onError: (error: Error) => void
 ) => {
-    let active = true;
-
-    const reactionsQuery = query(
-        collection(db, 'posts', postId, 'reactions'),
-        orderBy('createdAt', 'asc'),
-    );
-
-    const unsubscribe = onSnapshot(
-        reactionsQuery,
-        async snapshot => {
-            try {
-                const reactions = await Promise.all(
-                    snapshot.docs.map(async item => {
-                        const data = item.data() as PostReaction;
-
-                        let author = data.author;
-
-                        // Support reactions created before author snapshots.
-                        if (!author) {
-                            const userSnapshot = await getDoc(
-                                doc(db, 'users', data.uid),
-                            );
-
-                            const profile = userSnapshot.exists()
-                                ? userSnapshot.data()
-                                : {};
-
-                            author = {
-                                uid: data.uid,
-                                name: profile.name || 'LinkUp User',
-                                username: profile.username || '',
-                                photoURL: profile.photoURL || '',
-                            };
-                        }
-
-                        return {
-                            uid: data.uid,
-                            type: data.type,
-                            author,
-                        };
-                    }),
-                );
-
-                if (active) callback(reactions);
-            } catch (error) {
-                if (active) onError?.(error as Error);
-            }
+    const reactionsRef = collection(db, 'posts', postId, 'reactions');
+    return onSnapshot(
+        reactionsRef,
+        snapshot => {
+            const list: PostReactionWithAuthor[] = [];
+            snapshot.forEach(docSnap => {
+                list.push(docSnap.data() as PostReactionWithAuthor);
+            });
+            onUpdate(list);
         },
-        error => {
-            if (active) onError?.(error);
-        },
+        error => onError(error)
     );
+};
 
-    return () => {
-        active = false;
-        unsubscribe();
-    };
+/**
+ * Add a comment to a post & trigger notification
+ */
+export const addPostComment = async (
+    postId: string,
+    postAuthorId: string,
+    currentUser: PostAuthor,
+    text: string
+): Promise<void> => {
+    try {
+        const commentsRef = collection(db, 'posts', postId, 'comments');
+        const postRef = doc(db, 'posts', postId);
+
+        await addDoc(commentsRef, {
+            author: currentUser,
+            text,
+            createdAt: serverTimestamp(),
+        });
+
+        await updateDoc(postRef, {
+            commentCount: increment(1),
+        });
+
+        await sendNotification(postAuthorId, {
+            senderId: currentUser.uid,
+            senderName: currentUser.name,
+            senderPhotoURL: currentUser.photoURL || '',
+            type: 'comment',
+            message: `commented on your post: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`,
+            postId: postId,
+        });
+    } catch (error) {
+        console.error('Error adding comment:', error);
+        throw error;
+    }
+};
+
+export const subscribeToPostComments = (
+    postId: string,
+    onUpdate: (comments: PostComment[]) => void,
+    onError: (error: Error) => void
+) => {
+    const commentsRef = collection(db, 'posts', postId, 'comments');
+    const q = query(commentsRef, orderBy('createdAt', 'asc'));
+
+    return onSnapshot(
+        q,
+        snapshot => {
+            const list: PostComment[] = [];
+            snapshot.forEach(docSnap => {
+                list.push({
+                    id: docSnap.id,
+                    ...docSnap.data(),
+                } as PostComment);
+            });
+            onUpdate(list);
+        },
+        error => onError(error)
+    );
 };

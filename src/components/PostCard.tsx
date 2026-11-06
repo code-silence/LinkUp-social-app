@@ -40,8 +40,9 @@ const reactions: {
         { type: 'love', label: 'Love', symbol: '💖' },
         { type: 'haha', label: 'Haha', symbol: '😂' },
         { type: 'angry', label: 'Angry', symbol: '😡' },
-        { type: 'clap', label: 'Clap', symbol: '👏' },
+        { type: 'wow', label: 'Wow', symbol: '😮' },
         { type: 'sad', label: 'Sad', symbol: '😢' },
+        { type: 'like', label: 'Like', symbol: '👍' },
     ];
 
 const showMessage = (message: string) => {
@@ -201,6 +202,7 @@ export default function PostCard({
         try {
             await addPostComment(
                 post.id,
+                post.authorId,
                 currentUser,
                 trimmedText,
             );
@@ -234,7 +236,7 @@ export default function PostCard({
 
     return (
         <View style={styles.card}>
-            {/* Author */}
+            {/* Author section */}
             <View style={styles.postHeader}>
                 <Pressable
                     style={styles.authorSection}
@@ -258,7 +260,7 @@ export default function PostCard({
                 </Pressable>
             </View>
 
-            {/* Caption */}
+            {/* Post caption */}
             {!!post.text && (
                 <Text style={styles.postText}>
                     {post.text}
@@ -318,7 +320,7 @@ export default function PostCard({
 
             <View style={styles.divider} />
 
-            {/* Actions */}
+            {/* Action buttons */}
             <View style={styles.actions}>
                 <View style={styles.reactionAction}>
                     <Pressable
@@ -381,9 +383,7 @@ export default function PostCard({
                 </Pressable>
             </View>
 
-
-
-            {/* Full-screen image viewer */}
+            {/* Full-screen image viewer modal */}
             <Modal
                 visible={imageViewerVisible}
                 transparent
@@ -442,7 +442,7 @@ export default function PostCard({
                 </View>
             </Modal>
 
-            {/* Comments Modal */}
+            {/* Comments modal */}
             <Modal
                 visible={showComments}
                 transparent
@@ -457,7 +457,6 @@ export default function PostCard({
                         style={styles.commentsModal}
                         onPress={event => event.stopPropagation()}
                     >
-                        {/* Header */}
                         <View style={styles.commentsHeader}>
                             <Text style={styles.commentsTitle}>
                                 Comments ({comments.length})
@@ -470,7 +469,6 @@ export default function PostCard({
 
                         <View style={styles.divider} />
 
-                        {/* Scrollable comments */}
                         <ScrollView
                             style={styles.commentsList}
                             contentContainerStyle={styles.commentsListContent}
@@ -499,7 +497,6 @@ export default function PostCard({
                             )}
                         </ScrollView>
 
-                        {/* Fixed comment input */}
                         <View style={styles.commentInputContainer}>
                             <View style={styles.commentInputRow}>
                                 <Avatar author={currentUser} size={36} />
@@ -538,8 +535,7 @@ export default function PostCard({
                 </Pressable>
             </Modal>
 
-
-            {/* People who reacted */}
+            {/* Reactions modal */}
             <Modal
                 visible={showReactions}
                 transparent
@@ -773,7 +769,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: Colors.text,
     },
-
     commentsOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.45)',
@@ -781,7 +776,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: Spacing.md,
     },
-
     commentsModal: {
         width: '100%',
         maxWidth: 520,
@@ -791,44 +785,37 @@ const styles = StyleSheet.create({
         borderRadius: Radius.large,
         overflow: 'hidden',
     },
-
     commentsHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: Spacing.md,
     },
-
     commentsTitle: {
         fontFamily: Fonts.bold,
         fontSize: 16,
         color: Colors.text,
     },
-
     commentsClose: {
         fontSize: 18,
         color: Colors.textSecondary,
         paddingHorizontal: Spacing.xs,
     },
-
     commentsList: {
         flex: 1,
         paddingHorizontal: Spacing.md,
     },
-
     commentsListContent: {
         flexGrow: 1,
         gap: Spacing.md,
         paddingVertical: Spacing.md,
     },
-
     commentInputContainer: {
         borderTopWidth: 1,
         borderTopColor: Colors.border,
         padding: Spacing.md,
         backgroundColor: Colors.surface,
     },
-
     commentInputRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -959,7 +946,6 @@ const styles = StyleSheet.create({
     clickableCount: {
         color: Colors.primary,
     },
-
     reactionsOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.45)',
@@ -967,7 +953,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: Spacing.md,
     },
-
     reactionsModal: {
         width: '100%',
         maxWidth: 420,
@@ -976,34 +961,28 @@ const styles = StyleSheet.create({
         borderRadius: Radius.large,
         overflow: 'hidden',
     },
-
     reactionsHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: Spacing.md,
     },
-
     reactionsTitle: {
         fontFamily: Fonts.bold,
         fontSize: 16,
         color: Colors.text,
     },
-
     reactionsClose: {
         fontSize: 18,
         color: Colors.textSecondary,
         paddingHorizontal: Spacing.xs,
     },
-
     reactionsList: {
         paddingHorizontal: Spacing.md,
     },
-
     reactionsLoader: {
         padding: Spacing.xl,
     },
-
     noReactions: {
         fontFamily: Fonts.regular,
         fontSize: 13,
@@ -1011,31 +990,26 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         padding: Spacing.xl,
     },
-
     reactionUser: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: Spacing.sm,
         gap: Spacing.sm,
     },
-
     reactionUserInfo: {
         flex: 1,
     },
-
     reactionUserName: {
         fontFamily: Fonts.bold,
         fontSize: 13,
         color: Colors.text,
     },
-
     reactionUsername: {
         fontFamily: Fonts.regular,
         fontSize: 11,
         color: Colors.textSecondary,
         marginTop: 3,
     },
-
     reactionUserEmoji: {
         fontSize: 20,
         marginRight: Spacing.sm,

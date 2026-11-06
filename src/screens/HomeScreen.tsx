@@ -12,13 +12,15 @@ import {
 
 import ProfileScreen from './ProfileScreen';
 import FriendsScreen from './FriendsScreen';
+import NotificationsScreen from './NotificationsScreen';
+import PublicProfileScreen from './PublicProfileScreen';
+import CreatePostScreen from './CreatePostScreen';
 
 import { User } from 'firebase/auth';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
 import { getUserProfile, UserProfile } from '../services/user';
-import PublicProfileScreen from './PublicProfileScreen';
-import CreatePostScreen from './CreatePostScreen';
 import { Post, PostAuthor, subscribeToFeed } from '../services/posts';
+import { subscribeToNotifications } from '../services/notifications';
 import PostCard from '../components/PostCard';
 import logo from '../assets/logo.png';
 
@@ -86,11 +88,13 @@ function Avatar({
 
 export default function HomeScreen({ user, onLogout }: Props) {
     const { width, height } = useWindowDimensions();
-    type ActivePage = 'Home' | 'Profile' | 'Friends' | 'Create Post';
+    type ActivePage = 'Home' | 'Profile' | 'Friends' | 'Create Post' | 'Notifications' | 'SinglePost';
 
     const [activePage, setActivePage] = useState<ActivePage>('Home');
     const [globalProfile, setGlobalProfile] = useState<UserProfile | null>(null);
     const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+    const [viewingPostId, setViewingPostId] = useState<string | null>(null);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const isMobile = width < 700;
     const isDesktop = width >= 1100;
@@ -100,7 +104,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
     const [feedError, setFeedError] = useState('');
     const emailPrefix = user.email ? user.email.split('@')[0] : 'User';
 
-
     const currentUser: PostAuthor = {
         uid: user.uid,
         name: globalProfile?.name || user.displayName || emailPrefix,
@@ -108,6 +111,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
         photoURL: globalProfile?.photoURL || user.photoURL || '',
     };
 
+    // Subscribe to feed posts in real-time
     useEffect(() => {
         const unsubscribe = subscribeToFeed(
             data => {
@@ -124,6 +128,20 @@ export default function HomeScreen({ user, onLogout }: Props) {
 
         return unsubscribe;
     }, []);
+
+    // Subscribe to unread notifications count for badge
+    useEffect(() => {
+        const unsubscribe = subscribeToNotifications(
+            user.uid,
+            notifs => {
+                const unread = notifs.filter(n => !n.read).length;
+                setUnreadCount(unread);
+            },
+            error => console.error('Notification badge error:', error)
+        );
+
+        return () => unsubscribe();
+    }, [user.uid]);
 
     useEffect(() => {
         const fetchGlobalProfile = async () => {
@@ -146,11 +164,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
         mobile = false,
     ) => {
         const isActive = activePage === item.label;
-        const canNavigate =
-            item.label === 'Home' ||
-            item.label === 'Profile' ||
-            item.label === 'Friends' ||
-            item.label === 'Create Post';
+        const canNavigate = true;
 
         return (
             <Pressable
@@ -160,6 +174,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                     if (canNavigate) {
                         setActivePage(item.label as ActivePage);
                         setViewingProfileId(null);
+                        setViewingPostId(null);
                     }
                 }}
                 style={
@@ -171,14 +186,25 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         ]
                 }
             >
-                <Text
-                    style={[
-                        mobile ? styles.mobileNavIcon : styles.navIcon,
-                        isActive && styles.navTextActive,
-                    ]}
-                >
-                    {item.icon}
-                </Text>
+                <View style={styles.navIconWrapper}>
+                    <Text
+                        style={[
+                            mobile ? styles.mobileNavIcon : styles.navIcon,
+                            isActive && styles.navTextActive,
+                        ]}
+                    >
+                        {item.icon}
+                    </Text>
+
+                    {/* Unread Notification Badge */}
+                    {item.label === 'Notifications' && unreadCount > 0 && (
+                        <View style={styles.badgeContainer}>
+                            <Text style={styles.badgeText}>
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                            </Text>
+                        </View>
+                    )}
+                </View>
 
                 <Text
                     style={[
@@ -193,6 +219,9 @@ export default function HomeScreen({ user, onLogout }: Props) {
             </Pressable>
         );
     };
+
+    // Find specific post when viewed from notification
+    const selectedPost = posts.find(p => p.id === viewingPostId);
 
     return (
         <View style={[styles.app, { height }]}>
@@ -264,7 +293,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
                     ) : (
                         <Text style={styles.topBarTitle}>
-                            {viewingProfileId ? "Viewing Profile" : activePage}
+                            {viewingProfileId 
+                                ? "Viewing Profile" 
+                                : viewingPostId 
+                                ? "Post Details" 
+                                : activePage}
                         </Text>
                     )}
 
@@ -291,8 +324,42 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 {viewingProfileId ? (
                     <PublicProfileScreen
                         userId={viewingProfileId}
+                        currentUser={user}
                         onBack={() => setViewingProfileId(null)}
                     />
+                ) : viewingPostId ? (
+                    <ScrollView
+                        style={styles.contentScroll}
+                        contentContainerStyle={styles.content}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <View style={styles.singlePostWrapper}>
+                            <Pressable
+                                style={styles.backButton}
+                                onPress={() => setViewingPostId(null)}
+                            >
+                                <Text style={styles.backButtonText}>← Back to Notifications</Text>
+                            </Pressable>
+
+                            {selectedPost ? (
+                                <PostCard
+                                    post={selectedPost}
+                                    currentUser={currentUser}
+                                    onViewProfile={userId => {
+                                        setViewingPostId(null);
+                                        setViewingProfileId(userId);
+                                    }}
+                                />
+                            ) : (
+                                <View style={styles.emptyFeed}>
+                                    <Text style={styles.emptyTitle}>Post not found</Text>
+                                    <Text style={styles.emptyDescription}>
+                                        This post may have been deleted or is no longer available.
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </ScrollView>
                 ) : activePage === 'Profile' ? (
                     <ProfileScreen
                         user={user}
@@ -305,6 +372,16 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         user={user}
                         onViewProfile={userId => {
                             setViewingProfileId(userId);
+                        }}
+                    />
+                ) : activePage === 'Notifications' ? (
+                    <NotificationsScreen
+                        user={user}
+                        onViewProfile={userId => {
+                            setViewingProfileId(userId);
+                        }}
+                        onViewPost={postId => {
+                            setViewingPostId(postId);
                         }}
                     />
                 ) : activePage === 'Create Post' ? (
@@ -440,7 +517,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 {isMobile && (
                     <View style={styles.bottomNavigation}>
                         {navigation
-                            .filter(item => item.label !== 'Notifications')
                             .map(item => renderNavigationItem(item, true))}
                     </View>
                 )}
@@ -449,6 +525,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
         </View>
     );
 }
+
 const styles = StyleSheet.create({
     app: {
         flex: 1,
@@ -542,11 +619,15 @@ const styles = StyleSheet.create({
     navItemActive: {
         backgroundColor: Colors.accent,
     },
+    navIconWrapper: {
+        position: 'relative',
+        width: 25,
+        alignItems: 'center',
+    },
     navIcon: {
         fontFamily: Fonts.bold,
         fontSize: 21,
         color: Colors.textSecondary,
-        width: 25,
         textAlign: 'center',
     },
     navLabel: {
@@ -556,6 +637,25 @@ const styles = StyleSheet.create({
     },
     navTextActive: {
         color: Colors.primary,
+    },
+    badgeContainer: {
+        position: 'absolute',
+        top: -6,
+        right: -10,
+        backgroundColor: Colors.danger,
+        borderRadius: Radius.round,
+        minWidth: 18,
+        height: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 3,
+        borderWidth: 1.5,
+        borderColor: Colors.surface,
+    },
+    badgeText: {
+        fontFamily: Fonts.bold,
+        fontSize: 9,
+        color: '#FFFFFF',
     },
     sidebarBottom: {
         marginTop: 'auto',
@@ -805,28 +905,6 @@ const styles = StyleSheet.create({
         fontSize: 10,
         color: Colors.textSecondary,
     },
-    placeholderContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    placeholderText: {
-        fontFamily: Fonts.bold,
-        fontSize: 18,
-        color: Colors.text,
-        marginBottom: Spacing.lg,
-    },
-    backButton: {
-        backgroundColor: Colors.primary,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.md,
-        borderRadius: Radius.medium,
-    },
-    backButtonText: {
-        fontFamily: Fonts.bold,
-        color: Colors.surface,
-        fontSize: 14,
-    },
     postsContainer: {
         padding: Spacing.md,
     },
@@ -845,10 +923,28 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 10,
     },
-
     brandLogo: {
         width: 38,
         height: 38,
         borderRadius: 10,
+    },
+    singlePostWrapper: {
+        width: '100%',
+        maxWidth: 650,
+        alignSelf: 'center',
+        gap: Spacing.md,
+    },
+    backButton: {
+        alignSelf: 'flex-start',
+        paddingVertical: 8,
+        paddingHorizontal: Spacing.md,
+        backgroundColor: Colors.accent,
+        borderRadius: Radius.medium,
+        marginBottom: Spacing.sm,
+    },
+    backButtonText: {
+        fontFamily: Fonts.bold,
+        fontSize: 13,
+        color: Colors.primary,
     },
 });
