@@ -47,7 +47,7 @@ export default function FriendsScreen({
     user,
     onViewProfile,
 }: FriendsScreenProps) {
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
     const cardWidth = width < 520 ? '100%' : 220;
 
@@ -349,8 +349,8 @@ export default function FriendsScreen({
                         {activeTab === 'Friend Requests'
                             ? 'Wants to connect with you'
                             : activeTab === 'Sent Requests'
-                              ? 'Request pending'
-                              : 'Suggested for you'}
+                                ? 'Request pending'
+                                : 'Suggested for you'}
                     </Text>
 
                     <View style={styles.cardActions}>
@@ -525,15 +525,23 @@ export default function FriendsScreen({
                         </Text>
                     </View>
                 ) : displayedUsers.length > 0 ? (
-                    <View
-                        style={
-                            activeTab === 'Your Friends'
-                                ? styles.listContainer
-                                : styles.grid
-                        }
-                    >
-                        {displayedUsers.map(renderCard)}
-                    </View>
+                    activeTab === 'Your Friends' ? (
+                        <ScrollView
+                            style={[
+                                styles.friendsListScroll,
+                                { maxHeight: height * (isMobile ? 0.55 : 0.65) },
+                            ]}
+                            contentContainerStyle={styles.listContainer}
+                            showsVerticalScrollIndicator
+                            nestedScrollEnabled
+                        >
+                            {displayedUsers.map(renderCard)}
+                        </ScrollView>
+                    ) : (
+                        <View style={styles.grid}>
+                            {displayedUsers.map(renderCard)}
+                        </View>
+                    )
                 ) : (
                     <View style={styles.emptyContainer}>
                         <View style={styles.emptyIconContainer}>
@@ -878,5 +886,9 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.bold,
         fontSize: 14,
         color: Colors.surface,
+    },
+    friendsListScroll: {
+        width: '100%',
+        flexGrow: 0,
     },
 });

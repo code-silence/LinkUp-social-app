@@ -6,6 +6,7 @@ import {
     ScrollView,
     StyleSheet,
     useWindowDimensions,
+    ActivityIndicator,
     Image,
 } from 'react-native';
 
@@ -16,6 +17,10 @@ import { User } from 'firebase/auth';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
 import { getUserProfile, UserProfile } from '../services/user';
 import PublicProfileScreen from './PublicProfileScreen';
+import CreatePostScreen from './CreatePostScreen';
+import { Post, PostAuthor, subscribeToFeed } from '../services/posts';
+import PostCard from '../components/PostCard';
+import logo from '../assets/logo.png';
 
 interface Props {
     user: User;
@@ -80,14 +85,45 @@ function Avatar({
 }
 
 export default function HomeScreen({ user, onLogout }: Props) {
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
+    type ActivePage = 'Home' | 'Profile' | 'Friends' | 'Create Post';
 
-    const [activePage, setActivePage] = useState<'Home' | 'Profile' | 'Friends'>('Home');
+    const [activePage, setActivePage] = useState<ActivePage>('Home');
     const [globalProfile, setGlobalProfile] = useState<UserProfile | null>(null);
     const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
     const isMobile = width < 700;
     const isDesktop = width >= 1100;
+
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [feedLoading, setFeedLoading] = useState(true);
+    const [feedError, setFeedError] = useState('');
+    const emailPrefix = user.email ? user.email.split('@')[0] : 'User';
+
+
+    const currentUser: PostAuthor = {
+        uid: user.uid,
+        name: globalProfile?.name || user.displayName || emailPrefix,
+        username: globalProfile?.username || '',
+        photoURL: globalProfile?.photoURL || user.photoURL || '',
+    };
+
+    useEffect(() => {
+        const unsubscribe = subscribeToFeed(
+            data => {
+                setPosts(data);
+                setFeedLoading(false);
+                setFeedError('');
+            },
+            error => {
+                console.error('Feed subscription error:', error);
+                setFeedError('Could not load your feed. Please try again.');
+                setFeedLoading(false);
+            },
+        );
+
+        return unsubscribe;
+    }, []);
 
     useEffect(() => {
         const fetchGlobalProfile = async () => {
@@ -101,7 +137,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
         fetchGlobalProfile();
     }, [user.uid]);
 
-    const emailPrefix = user.email ? user.email.split('@')[0] : 'User';
     const displayUserName = globalProfile?.name || user.displayName || emailPrefix;
     const displayFirstName = displayUserName.split(' ')[0];
     const displayPhotoURL = globalProfile?.photoURL || user.photoURL || undefined;
@@ -112,7 +147,10 @@ export default function HomeScreen({ user, onLogout }: Props) {
     ) => {
         const isActive = activePage === item.label;
         const canNavigate =
-            item.label === 'Home' || item.label === 'Profile' || item.label === 'Friends';
+            item.label === 'Home' ||
+            item.label === 'Profile' ||
+            item.label === 'Friends' ||
+            item.label === 'Create Post';
 
         return (
             <Pressable
@@ -120,7 +158,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 disabled={!canNavigate}
                 onPress={() => {
                     if (canNavigate) {
-                        setActivePage(item.label as 'Home' | 'Profile' | 'Friends');
+                        setActivePage(item.label as ActivePage);
                         setViewingProfileId(null);
                     }
                 }}
@@ -157,53 +195,73 @@ export default function HomeScreen({ user, onLogout }: Props) {
     };
 
     return (
-        <View style={styles.app}>
+        <View style={[styles.app, { height }]}>
             {!isMobile && (
                 <View style={styles.sidebar}>
-                    <Text style={styles.brand}>LinkUp</Text>
-
-                    <View style={styles.account}>
-                        <Avatar
-                            name={displayUserName}
-                            url={displayPhotoURL}
-                            size={46}
-                        />
-
-                        <View style={styles.accountInfo}>
-                            <Text style={styles.accountName} numberOfLines={1}>
-                                {displayUserName}
-                            </Text>
-
-                            <Text style={styles.accountEmail} numberOfLines={1}>
-                                {user.email}
-                            </Text>
+                    <ScrollView
+                        style={styles.sidebarScroll}
+                        contentContainerStyle={styles.sidebarContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <View style={styles.brandContainer}>
+                            <Image
+                                source={logo}
+                                style={styles.brandLogo}
+                                resizeMode="contain"
+                            />
+                            <Text style={styles.brand}>LinkUp!</Text>
                         </View>
-                    </View>
 
-                    <Text style={styles.menuHeading}>MENU</Text>
+                        <View style={styles.account}>
+                            <Avatar
+                                name={displayUserName}
+                                url={displayPhotoURL}
+                                size={46}
+                            />
 
-                    <View style={styles.navigation}>
-                        {navigation.map(item => renderNavigationItem(item))}
-                    </View>
+                            <View style={styles.accountInfo}>
+                                <Text style={styles.accountName} numberOfLines={1}>
+                                    {displayUserName}
+                                </Text>
 
-                    <View style={styles.sidebarBottom}>
-                        <View style={styles.sidebarDivider} />
+                                <Text style={styles.accountEmail} numberOfLines={1}>
+                                    {user.email}
+                                </Text>
+                            </View>
+                        </View>
 
-                        <Pressable
-                            onPress={onLogout}
-                            style={styles.logoutButton}
-                        >
-                            <Text style={styles.logoutIcon}>↪</Text>
-                            <Text style={styles.logoutText}>Sign out</Text>
-                        </Pressable>
-                    </View>
+                        <Text style={styles.menuHeading}>MENU</Text>
+
+                        <View style={styles.navigation}>
+                            {navigation.map(item => renderNavigationItem(item))}
+                        </View>
+
+                        <View style={styles.sidebarBottom}>
+                            <View style={styles.sidebarDivider} />
+
+                            <Pressable
+                                onPress={onLogout}
+                                style={styles.logoutButton}
+                            >
+                                <Text style={styles.logoutIcon}>↪</Text>
+                                <Text style={styles.logoutText}>Sign out</Text>
+                            </Pressable>
+                        </View>
+                    </ScrollView>
                 </View>
             )}
 
             <View style={styles.mainArea}>
                 <View style={styles.topBar}>
                     {isMobile ? (
-                        <Text style={styles.brand}>LinkUp</Text>
+                        <View style={styles.brandContainer}>
+                            <Image
+                                source={logo}
+                                style={styles.brandLogo}
+                                resizeMode="contain"
+                            />
+                            <Text style={styles.brand}>LinkUp!</Text>
+                        </View>
                     ) : (
                         <Text style={styles.topBarTitle}>
                             {viewingProfileId ? "Viewing Profile" : activePage}
@@ -249,6 +307,14 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             setViewingProfileId(userId);
                         }}
                     />
+                ) : activePage === 'Create Post' ? (
+                    <CreatePostScreen
+                        user={user}
+                        onPostCreated={() => {
+                            setActivePage('Home');
+                            setViewingProfileId(null);
+                        }}
+                    />
                 ) : (
                     <ScrollView
                         style={styles.contentScroll}
@@ -278,30 +344,48 @@ export default function HomeScreen({ user, onLogout }: Props) {
 
                                 <View style={styles.feedCard}>
                                     <View style={styles.feedCardHeader}>
-                                        <Text style={styles.feedTitle}>
-                                            Your feed
-                                        </Text>
-
+                                        <Text style={styles.feedTitle}>Your feed</Text>
                                         <Text style={styles.feedSubtitle}>
                                             Latest updates from your community
                                         </Text>
                                     </View>
 
-                                    <View style={styles.emptyFeed}>
-                                        <View style={styles.emptyIcon}>
-                                            <Text style={styles.emptyIconText}>
-                                                ◇
-                                            </Text>
-                                        </View>
+                                    <View style={styles.postsContainer}>
+                                        {feedLoading ? (
+                                            <ActivityIndicator
+                                                size="large"
+                                                color={Colors.primary}
+                                                style={styles.feedLoader}
+                                            />
+                                        ) : feedError ? (
+                                            <Text style={styles.feedStatus}>{feedError}</Text>
+                                        ) : posts.length === 0 ? (
+                                            <View style={styles.emptyFeed}>
+                                                <View style={styles.emptyIcon}>
+                                                    <Text style={styles.emptyIconText}>◇</Text>
+                                                </View>
 
-                                        <Text style={styles.emptyTitle}>
-                                            Nothing here yet
-                                        </Text>
+                                                <Text style={styles.emptyTitle}>
+                                                    Nothing here yet
+                                                </Text>
 
-                                        <Text style={styles.emptyDescription}>
-                                            Your feed will show posts from you and
-                                            your friends.
-                                        </Text>
+                                                <Text style={styles.emptyDescription}>
+                                                    Your feed will show posts from you and your friends.
+                                                    Be the first to share something!
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            posts.map(post => (
+                                                <PostCard
+                                                    key={post.id}
+                                                    post={post}
+                                                    currentUser={currentUser}
+                                                    onViewProfile={userId => {
+                                                        setViewingProfileId(userId);
+                                                    }}
+                                                />
+                                            ))
+                                        )}
                                     </View>
                                 </View>
                             </View>
@@ -365,19 +449,28 @@ export default function HomeScreen({ user, onLogout }: Props) {
         </View>
     );
 }
-
 const styles = StyleSheet.create({
     app: {
         flex: 1,
         flexDirection: 'row',
         backgroundColor: Colors.background,
-        minHeight: '100%',
+        overflow: 'hidden',
     },
     sidebar: {
         width: 250,
+        height: '100%',
         backgroundColor: Colors.surface,
         borderRightWidth: 1,
         borderRightColor: Colors.border,
+        paddingHorizontal: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+    },
+    sidebarScroll: {
+        flex: 1,
+    },
+    sidebarContent: {
+        flexGrow: 1,
         paddingHorizontal: Spacing.lg,
         paddingTop: Spacing.xl,
         paddingBottom: Spacing.lg,
@@ -489,10 +582,13 @@ const styles = StyleSheet.create({
     },
     mainArea: {
         flex: 1,
+        height: '100%',
         minWidth: 0,
+        minHeight: 0,
     },
     topBar: {
         height: 72,
+        flexShrink: 0,
         backgroundColor: Colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: Colors.border,
@@ -524,6 +620,7 @@ const styles = StyleSheet.create({
     },
     contentScroll: {
         flex: 1,
+        minHeight: 0,
     },
     content: {
         padding: Spacing.lg,
@@ -683,6 +780,7 @@ const styles = StyleSheet.create({
     },
     bottomNavigation: {
         height: 66,
+        flexShrink: 0,
         flexDirection: 'row',
         justifyContent: 'space-around',
         alignItems: 'center',
@@ -728,5 +826,29 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.bold,
         color: Colors.surface,
         fontSize: 14,
+    },
+    postsContainer: {
+        padding: Spacing.md,
+    },
+    feedLoader: {
+        paddingVertical: Spacing.xl,
+    },
+    feedStatus: {
+        fontFamily: Fonts.regular,
+        fontSize: 13,
+        color: Colors.danger,
+        textAlign: 'center',
+        paddingVertical: Spacing.xl,
+    },
+    brandContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+
+    brandLogo: {
+        width: 38,
+        height: 38,
+        borderRadius: 10,
     },
 });
