@@ -243,7 +243,7 @@ export default function PublicProfileScreen({
             showsVerticalScrollIndicator={false}
         >
             <Pressable style={styles.backButton} onPress={onBack}>
-                <Text style={styles.backButtonText}>Back to friends</Text>
+                <Text style={styles.backButtonText}>Back</Text>
             </Pressable>
 
             <View style={styles.profileCard}>
