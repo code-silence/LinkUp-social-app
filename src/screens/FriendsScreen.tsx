@@ -11,6 +11,7 @@ import {
     useWindowDimensions,
     Alert,
     Platform,
+    Modal,
 } from 'react-native';
 
 import { User } from 'firebase/auth';
@@ -56,6 +57,7 @@ export default function FriendsScreen({
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
 
     const [suggestions, setSuggestions] = useState<UserProfile[]>([]);
     const [requests, setRequests] = useState<UserProfile[]>([]);
@@ -448,55 +450,120 @@ export default function FriendsScreen({
                 isMobile ? styles.containerMobile : styles.containerDesktop,
             ]}
         >
-            <View
-                style={[
-                    styles.sidebar,
-                    isMobile && styles.sidebarMobile,
-                ]}
-            >
-                <Text style={styles.sidebarTitle}>Friends</Text>
+            {/* Desktop Sidebar */}
+            {!isMobile && (
+                <View style={styles.sidebar}>
+                    <Text style={styles.sidebarTitle}>Friends</Text>
 
-                <View style={styles.tabList}>
-                    {TABS.map(tab => {
-                        const isRequestsTab = tab === 'Friend Requests';
-                        const badgeCount = isRequestsTab ? requests.length : 0;
+                    <View style={styles.tabList}>
+                        {TABS.map(tab => {
+                            const isRequestsTab = tab === 'Friend Requests';
+                            const badgeCount = isRequestsTab ? requests.length : 0;
 
-                        return (
-                            <Pressable
-                                key={tab}
-                                style={[
-                                    styles.menuItem,
-                                    activeTab === tab && styles.menuItemActive,
-                                ]}
-                                onPress={() => {
-                                    setActiveTab(tab);
-                                    setSearchQuery('');
-                                }}
-                            >
-                                <View style={styles.tabItemRow}>
-                                    <Text
-                                        style={[
-                                            styles.menuText,
-                                            activeTab === tab && styles.menuTextActive,
-                                        ]}
-                                    >
-                                        {tab}
-                                    </Text>
+                            return (
+                                <Pressable
+                                    key={tab}
+                                    style={[
+                                        styles.menuItem,
+                                        activeTab === tab && styles.menuItemActive,
+                                    ]}
+                                    onPress={() => {
+                                        setActiveTab(tab);
+                                        setSearchQuery('');
+                                    }}
+                                >
+                                    <View style={styles.tabItemRow}>
+                                        <Text
+                                            style={[
+                                                styles.menuText,
+                                                activeTab === tab && styles.menuTextActive,
+                                            ]}
+                                        >
+                                            {tab}
+                                        </Text>
 
-                                    {/* Friend Request Badge */}
-                                    {isRequestsTab && badgeCount > 0 && (
-                                        <View style={styles.badgeContainer}>
-                                            <Text style={styles.badgeText}>
-                                                {badgeCount}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </Pressable>
-                        );
-                    })}
+                                        {isRequestsTab && badgeCount > 0 && (
+                                            <View style={styles.badgeContainer}>
+                                                <Text style={styles.badgeText}>
+                                                    {badgeCount}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
                 </View>
-            </View>
+            )}
+
+            {/* Mobile Hamburger Menu Modal Overlay */}
+            {isMobile && (
+                <Modal
+                    visible={mobileMenuVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setMobileMenuVisible(false)}
+                >
+                    <Pressable
+                        style={styles.modalOverlay}
+                        onPress={() => setMobileMenuVisible(false)}
+                    >
+                        <Pressable
+                            style={styles.modalContent}
+                            onPress={e => e.stopPropagation()}
+                        >
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Friends Menu</Text>
+                                <Pressable onPress={() => setMobileMenuVisible(false)}>
+                                    <Text style={styles.modalClose}>✕</Text>
+                                </Pressable>
+                            </View>
+
+                            <View style={styles.tabList}>
+                                {TABS.map(tab => {
+                                    const isRequestsTab = tab === 'Friend Requests';
+                                    const badgeCount = isRequestsTab ? requests.length : 0;
+
+                                    return (
+                                        <Pressable
+                                            key={tab}
+                                            style={[
+                                                styles.menuItem,
+                                                activeTab === tab && styles.menuItemActive,
+                                            ]}
+                                            onPress={() => {
+                                                setActiveTab(tab);
+                                                setSearchQuery('');
+                                                setMobileMenuVisible(false);
+                                            }}
+                                        >
+                                            <View style={styles.tabItemRow}>
+                                                <Text
+                                                    style={[
+                                                        styles.menuText,
+                                                        activeTab === tab && styles.menuTextActive,
+                                                    ]}
+                                                >
+                                                    {tab}
+                                                </Text>
+
+                                                {isRequestsTab && badgeCount > 0 && (
+                                                    <View style={styles.badgeContainer}>
+                                                        <Text style={styles.badgeText}>
+                                                            {badgeCount}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+            )}
 
             <ScrollView
                 style={styles.mainContent}
@@ -510,13 +577,26 @@ export default function FriendsScreen({
                         isMobile && styles.headerMobile,
                     ]}
                 >
-                    <View>
-                        <Text style={styles.headerTitle}>{activeTab}</Text>
-                        <Text style={styles.headerSubtitle}>
-                            {activeTab === 'Suggestions'
-                                ? 'Discover people on LinkUp.'
-                                : 'Manage your connections.'}
-                        </Text>
+                    <View style={styles.headerLeftRow}>
+                        <View>
+                            <Text style={styles.headerTitle}>{activeTab}</Text>
+                            <Text style={styles.headerSubtitle}>
+                                {activeTab === 'Suggestions'
+                                    ? 'Discover people on LinkUp.'
+                                    : 'Manage your connections.'}
+                            </Text>
+                        </View>
+
+                        {/* Hamburger Menu Button for Mobile View */}
+                        {isMobile && (
+                            <Pressable
+                                style={styles.hamburgerButton}
+                                onPress={() => setMobileMenuVisible(true)}
+                            >
+                                <Text style={styles.hamburgerText}>☰</Text>
+                                {requests.length > 0 && <View style={styles.hamburgerDot} />}
+                            </Pressable>
+                        )}
                     </View>
 
                     <TextInput
@@ -620,14 +700,6 @@ const styles = StyleSheet.create({
         borderRightColor: Colors.border,
         padding: Spacing.lg,
     },
-    sidebarMobile: {
-        width: '100%',
-        borderRightWidth: 0,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.border,
-        paddingVertical: Spacing.md,
-        paddingHorizontal: Spacing.md,
-    },
     sidebarTitle: {
         fontFamily: Fonts.black,
         fontSize: 22,
@@ -673,6 +745,46 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#FFFFFF',
     },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: Spacing.lg,
+    },
+    modalContent: {
+        width: '100%',
+        maxWidth: 320,
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.large,
+        padding: Spacing.lg,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        shadowColor: Colors.text,
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 8,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: Spacing.md,
+        paddingBottom: Spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.border,
+    },
+    modalTitle: {
+        fontFamily: Fonts.bold,
+        fontSize: 16,
+        color: Colors.text,
+    },
+    modalClose: {
+        fontSize: 18,
+        fontFamily: Fonts.bold,
+        color: Colors.textSecondary,
+        paddingHorizontal: 6,
+    },
     mainContent: {
         flex: 1,
     },
@@ -690,6 +802,39 @@ const styles = StyleSheet.create({
     },
     headerMobile: {
         alignItems: 'stretch',
+    },
+    headerLeftRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+    },
+    hamburgerButton: {
+        width: 42,
+        height: 42,
+        borderRadius: Radius.medium,
+        backgroundColor: Colors.surface,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+    },
+    hamburgerText: {
+        fontSize: 20,
+        fontFamily: Fonts.bold,
+        color: Colors.primary,
+    },
+    hamburgerDot: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 9,
+        height: 9,
+        borderRadius: Radius.round,
+        backgroundColor: Colors.danger,
+        borderWidth: 1.5,
+        borderColor: Colors.surface,
     },
     headerTitle: {
         fontFamily: Fonts.black,

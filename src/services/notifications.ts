@@ -3,6 +3,7 @@ import {
     doc,
     setDoc,
     updateDoc,
+    deleteDoc,
     query,
     orderBy,
     onSnapshot,
@@ -19,7 +20,7 @@ export interface AppNotification {
     senderPhotoURL?: string;
     type: 'like' | 'comment' | 'friend_request';
     message: string;
-    postId?: string; // Added postId to link notification to a specific post
+    postId?: string;
     read: boolean;
     createdAt: any;
 }
@@ -73,7 +74,7 @@ export const subscribeToNotifications = (
 };
 
 /**
- * Mark a specific notification as read
+ * Mark a specific notification as read in Firestore
  */
 export const markNotificationAsRead = async (userId: string, notificationId: string): Promise<void> => {
     try {
@@ -81,5 +82,18 @@ export const markNotificationAsRead = async (userId: string, notificationId: str
         await updateDoc(notifRef, { read: true });
     } catch (error) {
         console.error('Error marking notification as read:', error);
+    }
+};
+
+/**
+ * Delete a specific notification from Firestore
+ */
+export const deleteNotification = async (userId: string, notificationId: string): Promise<void> => {
+    try {
+        const notifRef = doc(db, 'users', userId, 'notifications', notificationId);
+        await deleteDoc(notifRef);
+    } catch (error) {
+        console.error('Error deleting notification:', error);
+        throw error;
     }
 };
