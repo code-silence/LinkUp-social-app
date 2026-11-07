@@ -10,7 +10,20 @@ import {
     Image,
     Alert,
     Platform,
+    Animated,
+    Easing,
 } from 'react-native';
+
+import {
+    House,
+    Users,
+    SquarePlus,
+    Bell,
+    UserRound,
+    LogOut,
+    ArrowLeft,
+    UsersRound,
+} from 'lucide-react-native';
 
 import ProfileScreen from './ProfileScreen';
 import FriendsScreen from './FriendsScreen';
@@ -23,7 +36,7 @@ import { Colors, Fonts, Radius, Spacing } from '../theme';
 import { getUserProfile, UserProfile } from '../services/user';
 import { Post, PostAuthor, subscribeToFeed } from '../services/posts';
 import { subscribeToNotifications } from '../services/notifications';
-import { getUsersByConnectionStatus } from '../services/friends';
+import { subscribeToPendingFriendRequests } from '../services/friends';
 import PostCard from '../components/PostCard';
 import logo from '../assets/logo.png';
 
@@ -33,11 +46,11 @@ interface Props {
 }
 
 const navigation = [
-    { label: 'Home', icon: '⌂' },
-    { label: 'Friends', icon: '♧' },
-    { label: 'Create Post', icon: '+' },
-    { label: 'Notifications', icon: '♢' },
-    { label: 'Profile', icon: '◉' },
+    { label: 'Home', Icon: House },
+    { label: 'Friends', Icon: Users },
+    { label: 'Create Post', Icon: SquarePlus },
+    { label: 'Notifications', Icon: Bell },
+    { label: 'Profile', Icon: UserRound },
 ] as const;
 
 function Avatar({
@@ -89,6 +102,66 @@ function Avatar({
     );
 }
 
+function AnimatedBrandText() {
+    const letters = 'LinkUp!'.split('');
+
+    const [animations] = useState(() =>
+        letters.map(() => new Animated.Value(0))
+    );
+
+    useEffect(() => {
+        const animation = Animated.loop(
+            Animated.sequence([
+                Animated.stagger(
+                    100,
+                    animations.map(value =>
+                        Animated.timing(value, {
+                            toValue: 1,
+                            duration: 300,
+                            easing: Easing.out(Easing.ease),
+                            useNativeDriver: true,
+                        })
+                    )
+                ),
+                Animated.delay(5000),
+                Animated.stagger(
+                    60,
+                    [...animations].reverse().map(value =>
+                        Animated.timing(value, {
+                            toValue: 0,
+                            duration: 150,
+                            useNativeDriver: true,
+                        })
+                    )
+                ),
+                Animated.delay(500),
+            ])
+        );
+
+        animation.start();
+
+        return () => {
+            animation.stop();
+        };
+    }, []);
+
+    return (
+        <View style={{ flexDirection: 'row' }}>
+            {letters.map((letter, index) => (
+                <Animated.Text
+                    key={index}
+                    style={[
+                        styles.brand,
+                        { opacity: animations[index] },
+                    ]}
+                >
+                    {letter}
+                </Animated.Text>
+            ))}
+        </View>
+    );
+}
+
 export default function HomeScreen({ user, onLogout }: Props) {
     const { width, height } = useWindowDimensions();
     type ActivePage = 'Home' | 'Profile' | 'Friends' | 'Create Post' | 'Notifications' | 'SinglePost';
@@ -99,7 +172,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
     const [viewingPostId, setViewingPostId] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
     const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false);
-    
+
     // State for top-right profile popup menu
     const [profileMenuVisible, setProfileMenuVisible] = useState(false);
 
@@ -150,22 +223,20 @@ export default function HomeScreen({ user, onLogout }: Props) {
         return () => unsubscribe();
     }, [user.uid]);
 
-    // Check if there are any pending received friend requests from Firebase Firestore
+    // Subscribe to pending friend requests in real time
     useEffect(() => {
-        const checkPendingRequests = async () => {
-            try {
-                const requests = await getUsersByConnectionStatus(user.uid, 'pending_received');
-                setHasPendingFriendRequests(requests.length > 0);
-            } catch (error) {
-                console.error('Error checking pending friend requests:', error);
-            }
-        };
+        const unsubscribe = subscribeToPendingFriendRequests(
+            user.uid,
+            hasPending => {
+                setHasPendingFriendRequests(hasPending);
+            },
+            error => {
+                console.error('Pending friend requests error:', error);
+            },
+        );
 
-        checkPendingRequests();
-
-        const interval = setInterval(checkPendingRequests, 5000);
-        return () => clearInterval(interval);
-    }, [user.uid, activePage]);
+        return unsubscribe;
+    }, [user.uid]);
 
     useEffect(() => {
         const fetchGlobalProfile = async () => {
@@ -213,39 +284,29 @@ export default function HomeScreen({ user, onLogout }: Props) {
         mobile = false,
     ) => {
         const isActive = activePage === item.label;
-        const canNavigate = true;
+        const Icon = item.Icon;
 
         return (
             <Pressable
                 key={item.label}
-                disabled={!canNavigate}
                 onPress={() => {
-                    if (canNavigate) {
-                        setActivePage(item.label as ActivePage);
-                        setViewingProfileId(null);
-                        setViewingPostId(null);
-                    }
+                    setActivePage(item.label as ActivePage);
+                    setViewingProfileId(null);
+                    setViewingPostId(null);
                 }}
                 style={
                     mobile
                         ? [styles.mobileNavItem, isActive && styles.mobileNavItemActive]
-                        : [
-                            styles.navItem,
-                            isActive && styles.navItemActive,
-                        ]
+                        : [styles.navItem, isActive && styles.navItemActive]
                 }
             >
                 <View style={styles.navIconWrapper}>
-                    <Text
-                        style={[
-                            mobile ? styles.mobileNavIcon : styles.navIcon,
-                            isActive && styles.navTextActive,
-                        ]}
-                    >
-                        {item.icon}
-                    </Text>
+                    <Icon
+                        size={mobile ? 23 : 22}
+                        color={isActive ? Colors.primary : Colors.textSecondary}
+                        strokeWidth={2}
+                    />
 
-                    {/* Unread Notification Badge with number */}
                     {item.label === 'Notifications' && unreadCount > 0 && (
                         <View style={styles.badgeContainer}>
                             <Text style={styles.badgeText}>
@@ -254,7 +315,6 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
                     )}
 
-                    {/* Pending Friend Requests Dot Indicator */}
                     {item.label === 'Friends' && hasPendingFriendRequests && (
                         <View style={styles.dotBadgeContainer} />
                     )}
@@ -266,9 +326,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         isActive && styles.navTextActive,
                     ]}
                 >
-                    {mobile && item.label === 'Create Post'
-                        ? 'Create'
-                        : item.label}
+                    {mobile && item.label === 'Create Post' ? 'Create' : item.label}
                 </Text>
             </Pressable>
         );
@@ -292,7 +350,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                 style={styles.brandLogo}
                                 resizeMode="contain"
                             />
-                            <Text style={styles.brand}>LinkUp!</Text>
+                            <AnimatedBrandText />
                         </View>
 
                         <View style={styles.account}>
@@ -332,8 +390,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                 onPress={handleSignOutPress}
                                 style={styles.logoutButton}
                             >
-                                <Text style={styles.logoutIcon}>↪</Text>
-                                <Text style={styles.logoutText}>Sign out</Text>
+                                <LogOut size={19} color={Colors.danger} strokeWidth={2} />                                <Text style={styles.logoutText}>Sign out</Text>
                             </Pressable>
                         </View>
                     </ScrollView>
@@ -349,22 +406,22 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                 style={styles.brandLogo}
                                 resizeMode="contain"
                             />
-                            <Text style={styles.brand}>LinkUp!</Text>
+                            <AnimatedBrandText />
                         </View>
                     ) : (
                         <Text style={styles.topBarTitle}>
-                            {viewingProfileId 
-                                ? "Viewing Profile" 
-                                : viewingPostId 
-                                ? "Post Details" 
-                                : activePage}
+                            {viewingProfileId
+                                ? "Viewing Profile"
+                                : viewingPostId
+                                    ? "Post Details"
+                                    : activePage}
                         </Text>
                     )}
 
                     <View style={styles.topBarRight}>
                         {/* Top-Right Profile Icon with Popup Menu */}
                         <View style={styles.profileMenuAnchor}>
-                            <Pressable 
+                            <Pressable
                                 onPress={() => setProfileMenuVisible(prev => !prev)}
                                 style={styles.topBarAvatarButton}
                             >
@@ -420,8 +477,10 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                 style={styles.backButton}
                                 onPress={() => setViewingPostId(null)}
                             >
-                                <Text style={styles.backButtonText}>← Back to Notifications</Text>
-                            </Pressable>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                                    <ArrowLeft size={16} color={Colors.primary} />
+                                    <Text style={styles.backButtonText}>Back to Notifications</Text>
+                                </View>                            </Pressable>
 
                             {selectedPost ? (
                                 <PostCard
@@ -521,8 +580,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                                         ) : posts.length === 0 ? (
                                             <View style={styles.emptyFeed}>
                                                 <View style={styles.emptyIcon}>
-                                                    <Text style={styles.emptyIconText}>◇</Text>
-                                                </View>
+                                                    <UsersRound size={30} color={Colors.primary} strokeWidth={1.8} />                                                </View>
 
                                                 <Text style={styles.emptyTitle}>
                                                     Nothing here yet
@@ -706,12 +764,6 @@ const styles = StyleSheet.create({
         width: 25,
         alignItems: 'center',
     },
-    navIcon: {
-        fontFamily: Fonts.bold,
-        fontSize: 21,
-        color: Colors.textSecondary,
-        textAlign: 'center',
-    },
     navLabel: {
         fontFamily: Fonts.bold,
         fontSize: 14,
@@ -737,7 +789,7 @@ const styles = StyleSheet.create({
     badgeText: {
         fontFamily: Fonts.bold,
         fontSize: 9,
-        color: '#FFFFFF',
+        color: Colors.surface,
     },
     dotBadgeContainer: {
         position: 'absolute',
@@ -764,10 +816,7 @@ const styles = StyleSheet.create({
         gap: 12,
         padding: 12,
     },
-    logoutIcon: {
-        fontSize: 20,
-        color: Colors.danger,
-    },
+
     logoutText: {
         fontFamily: Fonts.bold,
         fontSize: 13,
@@ -926,10 +975,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: 18,
     },
-    emptyIconText: {
-        fontSize: 34,
-        color: Colors.primary,
-    },
+
     emptyTitle: {
         fontFamily: Fonts.bold,
         fontSize: 16,
@@ -1024,11 +1070,7 @@ const styles = StyleSheet.create({
     mobileNavItemActive: {
         backgroundColor: Colors.accent,
     },
-    mobileNavIcon: {
-        fontFamily: Fonts.bold,
-        fontSize: 21,
-        color: Colors.textSecondary,
-    },
+
     mobileNavLabel: {
         fontFamily: Fonts.bold,
         fontSize: 10,

@@ -11,7 +11,11 @@ import {
     serverTimestamp,
     updateDoc,
     increment,
+    onSnapshot,
+    limit,
 } from 'firebase/firestore';
+
+
 import { UserProfile } from './user';
 import { sendNotification } from './notifications';
 
@@ -234,4 +238,38 @@ export const getUsersByConnectionStatus = async (
         console.error(`Error fetching users with status ${desiredStatus}:`, error);
         throw error;
     }
+};
+
+/**
+ * Subscribe to whether the current user has pending received friend requests.
+ * Only listens to one matching document because the UI needs a boolean.
+ */
+export const subscribeToPendingFriendRequests = (
+    currentUserId: string,
+    onChange: (hasPending: boolean) => void,
+    onError?: (error: Error) => void,
+) => {
+    const connectionsRef = collection(
+        db,
+        'users',
+        currentUserId,
+        'connections',
+    );
+
+    const q = query(
+        connectionsRef,
+        where('status', '==', 'pending_received'),
+        limit(1),
+    );
+
+    return onSnapshot(
+        q,
+        snapshot => {
+            onChange(!snapshot.empty);
+        },
+        error => {
+            console.error('Pending friend requests listener error:', error);
+            onError?.(error);
+        },
+    );
 };

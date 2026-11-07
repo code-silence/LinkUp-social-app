@@ -689,7 +689,7 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
 
                                 <View style={styles.stat}>
                                     <Text style={styles.statNumber}>
-                                        {profile.interests?.length ?? 0}                                    </Text>
+                                        {profile.interests?.length ?? 0}</Text>
                                     <Text style={styles.statLabel}>
                                         Interests
                                     </Text>
