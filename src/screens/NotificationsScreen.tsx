@@ -15,7 +15,8 @@ import { Colors, Fonts, Radius, Spacing } from '../theme';
 import { 
     AppNotification, 
     subscribeToNotifications, 
-    markNotificationAsRead 
+    markNotificationAsRead,
+    deleteNotification 
 } from '../services/notifications';
 
 interface NotificationsScreenProps {
@@ -23,6 +24,38 @@ interface NotificationsScreenProps {
     onViewProfile: (userId: string) => void;
     onViewPost: (postId: string) => void;
 }
+
+/**
+ * Format Firestore timestamp into a relative time string (e.g. "5m ago", "2h ago", "3d ago")
+ */
+const formatNotificationTime = (value: unknown) => {
+    if (!value) return '';
+
+    try {
+        const date =
+            typeof (value as any).toDate === 'function'
+                ? (value as any).toDate()
+                : new Date(value as string);
+
+        if (Number.isNaN(date.getTime())) return '';
+
+        const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+
+        if (seconds < 60) return 'Just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        if (days < 30) return `${days}d ago`;
+        const months = Math.floor(days / 30);
+        if (months < 12) return `${months}mo ago`;
+        const years = Math.floor(months / 12);
+        return `${years}y ago`;
+    } catch {
+        return '';
+    }
+};
 
 export default function NotificationsScreen({ 
     user, 
@@ -34,6 +67,7 @@ export default function NotificationsScreen({
 
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
     // Subscribe to real-time notifications from Firestore
     useEffect(() => {
@@ -52,8 +86,9 @@ export default function NotificationsScreen({
         return () => unsubscribe();
     }, [user.uid]);
 
-    // Handle clicking a notification
+    // Handle clicking a notification card
     const handlePressNotification = async (item: AppNotification) => {
+        setActiveMenuId(null);
         if (!item.read) {
             await markNotificationAsRead(user.uid, item.id);
         }
@@ -62,6 +97,28 @@ export default function NotificationsScreen({
             onViewPost(item.postId);
         } else if (item.senderId) {
             onViewProfile(item.senderId);
+        }
+    };
+
+    // Handle marking a notification as read
+    const handleMarkAsRead = async (notificationId: string, event: any) => {
+        event.stopPropagation();
+        setActiveMenuId(null);
+        try {
+            await markNotificationAsRead(user.uid, notificationId);
+        } catch (error) {
+            console.error('Error marking as read:', error);
+        }
+    };
+
+    // Handle deleting a notification
+    const handleDelete = async (notificationId: string, event: any) => {
+        event.stopPropagation();
+        setActiveMenuId(null);
+        try {
+            await deleteNotification(user.uid, notificationId);
+        } catch (error) {
+            console.error('Error deleting notification:', error);
         }
     };
 
@@ -106,13 +163,22 @@ export default function NotificationsScreen({
                     contentContainerStyle={[styles.listContent, isMobile && styles.listContentMobile]}
                     showsVerticalScrollIndicator={false}
                 >
-                    {notifications.map(item => {
+                    {notifications.map((item, index) => {
                         const senderName = item.senderName || 'User';
+                        const timeAgo = formatNotificationTime(item.createdAt);
+                        const isMenuOpen = activeMenuId === item.id;
+
+                        // Give higher zIndex to items appearing earlier in the list so their dropdowns sit above subsequent cards
+                        const dynamicZIndex = notifications.length - index;
 
                         return (
                             <Pressable
                                 key={item.id}
-                                style={[styles.notificationCard, !item.read && styles.unreadCard]}
+                                style={[
+                                    styles.notificationCard, 
+                                    !item.read && styles.unreadCard,
+                                    { zIndex: isMenuOpen ? 9999 : dynamicZIndex }
+                                ]}
                                 onPress={() => handlePressNotification(item)}
                             >
                                 <Pressable onPress={() => onViewProfile(item.senderId)}>
@@ -126,9 +192,46 @@ export default function NotificationsScreen({
                                         <Text style={styles.boldText}>{senderName} </Text>
                                         {item.message}
                                     </Text>
+
+                                    {!!timeAgo && (
+                                        <Text style={styles.timeText}>{timeAgo}</Text>
+                                    )}
                                 </View>
 
-                               {!item.read && <View style={styles.unreadDot} />}
+                                {!item.read && <View style={styles.unreadDot} />}
+
+                                {/* Three Dots Options Button & Dropdown Menu */}
+                                <View style={styles.menuContainer}>
+                                    <Pressable
+                                        style={styles.dotsButton}
+                                        onPress={(e) => {
+                                            e.stopPropagation();
+                                            setActiveMenuId(isMenuOpen ? null : item.id);
+                                        }}
+                                    >
+                                        <Text style={styles.dotsText}>⋮</Text>
+                                    </Pressable>
+
+                                    {isMenuOpen && (
+                                        <View style={styles.dropdownMenu}>
+                                            <Pressable
+                                                style={styles.dropdownItem}
+                                                onPress={(e) => handleMarkAsRead(item.id, e)}
+                                            >
+                                                <Text style={styles.dropdownText}>
+                                                    {item.read ? 'Mark as read' : 'Mark as read'}
+                                                </Text>
+                                            </Pressable>
+
+                                            <Pressable
+                                                style={styles.dropdownItem}
+                                                onPress={(e) => handleDelete(item.id, e)}
+                                            >
+                                                <Text style={[styles.dropdownText, styles.deleteText]}>Delete</Text>
+                                            </Pressable>
+                                        </View>
+                                    )}
+                                </View>
                             </Pressable>
                         );
                     })}
@@ -163,7 +266,8 @@ const styles = StyleSheet.create({
     },
     listContent: {
         maxWidth: 700,
-        gap: Spacing.sm,
+        gap: Spacing.md,
+        paddingBottom: 100, // Extra padding at the bottom so dropdown menus are fully visible
     },
     listContentMobile: {
         maxWidth: '100%',
@@ -177,6 +281,8 @@ const styles = StyleSheet.create({
         borderColor: Colors.border,
         padding: Spacing.md,
         gap: Spacing.md,
+        overflow: 'visible', // Allows dropdown menu to overflow outside card bounds cleanly
+        position: 'relative',
     },
     unreadCard: {
         backgroundColor: Colors.accent + '25',
@@ -217,11 +323,63 @@ const styles = StyleSheet.create({
     boldText: {
         fontFamily: Fonts.bold,
     },
+    timeText: {
+        fontFamily: Fonts.regular,
+        fontSize: 11,
+        color: Colors.textSecondary,
+        marginTop: 4,
+    },
     unreadDot: {
         width: 10,
         height: 10,
         borderRadius: Radius.round,
         backgroundColor: Colors.primary,
+    },
+    menuContainer: {
+        position: 'relative',
+        zIndex: 100,
+    },
+    dotsButton: {
+        width: 32,
+        height: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: Radius.round,
+    },
+    dotsText: {
+        fontSize: 18,
+        fontFamily: Fonts.bold,
+        color: Colors.textSecondary,
+    },
+    dropdownMenu: {
+        position: 'absolute',
+        right: 0,
+        top: 36, // Opens downwards right below the 3-dot button
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.medium,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        shadowColor: Colors.text,
+        shadowOpacity: 0.18,
+        shadowRadius: 8,
+        elevation: 10,
+        minWidth: 135,
+        zIndex: 1000,
+        overflow: 'hidden',
+    },
+    dropdownItem: {
+        paddingVertical: 10,
+        paddingHorizontal: Spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.border,
+    },
+    dropdownText: {
+        fontFamily: Fonts.bold,
+        fontSize: 12,
+        color: Colors.text,
+    },
+    deleteText: {
+        color: Colors.danger,
     },
     centerState: {
         flex: 1,

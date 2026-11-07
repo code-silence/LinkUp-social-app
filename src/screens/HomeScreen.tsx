@@ -8,6 +8,8 @@ import {
     useWindowDimensions,
     ActivityIndicator,
     Image,
+    Alert,
+    Platform,
 } from 'react-native';
 
 import ProfileScreen from './ProfileScreen';
@@ -21,6 +23,7 @@ import { Colors, Fonts, Radius, Spacing } from '../theme';
 import { getUserProfile, UserProfile } from '../services/user';
 import { Post, PostAuthor, subscribeToFeed } from '../services/posts';
 import { subscribeToNotifications } from '../services/notifications';
+import { getUsersByConnectionStatus } from '../services/friends';
 import PostCard from '../components/PostCard';
 import logo from '../assets/logo.png';
 
@@ -95,6 +98,10 @@ export default function HomeScreen({ user, onLogout }: Props) {
     const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
     const [viewingPostId, setViewingPostId] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false);
+    
+    // State for top-right profile popup menu
+    const [profileMenuVisible, setProfileMenuVisible] = useState(false);
 
     const isMobile = width < 700;
     const isDesktop = width >= 1100;
@@ -143,6 +150,23 @@ export default function HomeScreen({ user, onLogout }: Props) {
         return () => unsubscribe();
     }, [user.uid]);
 
+    // Check if there are any pending received friend requests from Firebase Firestore
+    useEffect(() => {
+        const checkPendingRequests = async () => {
+            try {
+                const requests = await getUsersByConnectionStatus(user.uid, 'pending_received');
+                setHasPendingFriendRequests(requests.length > 0);
+            } catch (error) {
+                console.error('Error checking pending friend requests:', error);
+            }
+        };
+
+        checkPendingRequests();
+
+        const interval = setInterval(checkPendingRequests, 5000);
+        return () => clearInterval(interval);
+    }, [user.uid, activePage]);
+
     useEffect(() => {
         const fetchGlobalProfile = async () => {
             try {
@@ -158,6 +182,31 @@ export default function HomeScreen({ user, onLogout }: Props) {
     const displayUserName = globalProfile?.name || user.displayName || emailPrefix;
     const displayFirstName = displayUserName.split(' ')[0];
     const displayPhotoURL = globalProfile?.photoURL || user.photoURL || undefined;
+
+    // Handle sign out with confirmation alert
+    const handleSignOutPress = () => {
+        setProfileMenuVisible(false);
+
+        const performLogout = () => {
+            onLogout();
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Are you sure you want to sign out?')) {
+                performLogout();
+            }
+            return;
+        }
+
+        Alert.alert(
+            'Sign out',
+            'Are you sure you want to sign out of your account?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'OK', onPress: performLogout },
+            ]
+        );
+    };
 
     const renderNavigationItem = (
         item: (typeof navigation)[number],
@@ -196,13 +245,18 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         {item.icon}
                     </Text>
 
-                    {/* Unread Notification Badge */}
+                    {/* Unread Notification Badge with number */}
                     {item.label === 'Notifications' && unreadCount > 0 && (
                         <View style={styles.badgeContainer}>
                             <Text style={styles.badgeText}>
                                 {unreadCount > 9 ? '9+' : unreadCount}
                             </Text>
                         </View>
+                    )}
+
+                    {/* Pending Friend Requests Dot Indicator */}
+                    {item.label === 'Friends' && hasPendingFriendRequests && (
+                        <View style={styles.dotBadgeContainer} />
                     )}
                 </View>
 
@@ -275,7 +329,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             <View style={styles.sidebarDivider} />
 
                             <Pressable
-                                onPress={onLogout}
+                                onPress={handleSignOutPress}
                                 style={styles.logoutButton}
                             >
                                 <Text style={styles.logoutIcon}>↪</Text>
@@ -299,37 +353,53 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
                     ) : (
                         <Text style={styles.topBarTitle}>
-                            {viewingProfileId
-                                ? "Viewing Profile"
-                                : viewingPostId
-                                    ? "Post Details"
-                                    : activePage}
+                            {viewingProfileId 
+                                ? "Viewing Profile" 
+                                : viewingPostId 
+                                ? "Post Details" 
+                                : activePage}
                         </Text>
                     )}
 
                     <View style={styles.topBarRight}>
-                        {isMobile && (
-                            <Pressable
-                                onPress={onLogout}
-                                style={styles.mobileLogout}
+                        {/* Top-Right Profile Icon with Popup Menu */}
+                        <View style={styles.profileMenuAnchor}>
+                            <Pressable 
+                                onPress={() => setProfileMenuVisible(prev => !prev)}
+                                style={styles.topBarAvatarButton}
                             >
-                                <Text style={styles.mobileLogoutText}>
-                                    Sign out
-                                </Text>
+                                <Avatar
+                                    name={displayUserName}
+                                    url={displayPhotoURL}
+                                    size={40}
+                                />
                             </Pressable>
-                        )}
 
-                        <Pressable onPress={() => {
-                            setActivePage('Profile');
-                            setViewingProfileId(null);
-                            setViewingPostId(null);
-                        }}>
-                            <Avatar
-                                name={displayUserName}
-                                url={displayPhotoURL}
-                                size={40}
-                            />
-                        </Pressable>
+                            {profileMenuVisible && (
+                                <View style={styles.topBarDropdown}>
+                                    <Pressable
+                                        style={styles.dropdownOption}
+                                        onPress={() => {
+                                            setProfileMenuVisible(false);
+                                            setActivePage('Profile');
+                                            setViewingProfileId(null);
+                                            setViewingPostId(null);
+                                        }}
+                                    >
+                                        <Text style={styles.dropdownOptionText}>Profile</Text>
+                                    </Pressable>
+
+                                    <Pressable
+                                        style={styles.dropdownOption}
+                                        onPress={handleSignOutPress}
+                                    >
+                                        <Text style={[styles.dropdownOptionText, styles.dropdownSignOutText]}>
+                                            Sign out
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            )}
+                        </View>
                     </View>
                 </View>
 
@@ -669,6 +739,17 @@ const styles = StyleSheet.create({
         fontSize: 9,
         color: '#FFFFFF',
     },
+    dotBadgeContainer: {
+        position: 'absolute',
+        top: -2,
+        right: -4,
+        backgroundColor: Colors.danger,
+        borderRadius: Radius.round,
+        width: 9,
+        height: 9,
+        borderWidth: 1.5,
+        borderColor: Colors.surface,
+    },
     sidebarBottom: {
         marginTop: 'auto',
     },
@@ -697,6 +778,7 @@ const styles = StyleSheet.create({
         height: '100%',
         minWidth: 0,
         minHeight: 0,
+        overflow: 'visible',
     },
     topBar: {
         height: 72,
@@ -708,6 +790,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        overflow: 'visible', // Ensure top bar allows dropdown popup to display fully without clipping
+        zIndex: 50,
     },
     topBarTitle: {
         fontFamily: Fonts.bold,
@@ -718,16 +802,44 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 15,
+        overflow: 'visible',
     },
-    mobileLogout: {
-        paddingHorizontal: 13,
-        paddingVertical: 9,
+    profileMenuAnchor: {
+        position: 'relative',
+        zIndex: 9999,
+        overflow: 'visible',
+    },
+    topBarAvatarButton: {
+        borderRadius: Radius.round,
+        overflow: 'hidden',
+    },
+    topBarDropdown: {
+        position: 'absolute',
+        right: 0,
+        top: 48,
+        backgroundColor: Colors.surface,
         borderRadius: Radius.medium,
-        backgroundColor: Colors.background,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        shadowColor: Colors.text,
+        shadowOpacity: 0.18,
+        shadowRadius: 8,
+        elevation: 20,
+        minWidth: 150,
+        zIndex: 10000,
     },
-    mobileLogoutText: {
+    dropdownOption: {
+        paddingVertical: 12,
+        paddingHorizontal: Spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.border,
+    },
+    dropdownOptionText: {
         fontFamily: Fonts.bold,
-        fontSize: 12,
+        fontSize: 13,
+        color: Colors.text,
+    },
+    dropdownSignOutText: {
         color: Colors.danger,
     },
     contentScroll: {
@@ -943,7 +1055,7 @@ const styles = StyleSheet.create({
     brandLogo: {
         width: 38,
         height: 38,
-        borderRadius: 10,
+        borderRadius: Radius.medium,
     },
     singlePostWrapper: {
         width: '100%',
