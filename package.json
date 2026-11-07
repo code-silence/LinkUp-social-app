@@ -15,11 +15,13 @@
     "@react-native/new-app-screen": "0.88.1",
     "firebase": "^13.1.0",
     "inline-style-prefixer": "^7.0.1",
+    "lucide-react-native": "^1.70.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
     "react-native-image-picker": "^8.3.0",
     "react-native-safe-area-context": "^5.5.2",
+    "react-native-svg": "^15.16.1",
     "react-native-web": "^0.21.4"
   },
   "devDependencies": {

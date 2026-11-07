@@ -7,7 +7,16 @@ import {
     Pressable,
     ActivityIndicator,
     StyleSheet,
+    Alert,
 } from 'react-native';
+
+import ShineButton from '../components/ShineButton';
+
+import {
+    getConnectionStatus,
+    sendFriendRequest,
+    ConnectionStatus,
+} from '../services/friends';
 
 import { UserProfile, getUserProfile } from '../services/user';
 import {
@@ -38,6 +47,14 @@ export default function PublicProfileScreen({
     const [recentPosts, setRecentPosts] = useState<Post[]>([]);
     const [postsLoading, setPostsLoading] = useState(true);
     const [postsError, setPostsError] = useState('');
+
+    const [connectionStatus, setConnectionStatus] =
+        useState<ConnectionStatus | null>(null);
+
+    const [connectionLoading, setConnectionLoading] = useState(true);
+    const [sendingRequest, setSendingRequest] = useState(false);
+
+    const isOwnProfile = userId === currentUser.uid;
 
     // Fetch public profile data and logged-in user profile data for correct avatar sync
     useEffect(() => {
@@ -75,6 +92,41 @@ export default function PublicProfileScreen({
         };
     }, [userId, currentUser.uid]);
 
+    useEffect(() => {
+        let isActive = true;
+
+        const checkConnection = async () => {
+            if (isOwnProfile) {
+                setConnectionStatus(null);
+                setConnectionLoading(false);
+                return;
+            }
+
+            setConnectionLoading(true);
+
+            try {
+                const status = await getConnectionStatus(
+                    currentUser.uid,
+                    userId,
+                );
+
+                if (isActive) {
+                    setConnectionStatus(status);
+                }
+            } catch (error) {
+                console.error('Connection check error:', error);
+            } finally {
+                if (isActive) setConnectionLoading(false);
+            }
+        };
+
+        checkConnection();
+
+        return () => {
+            isActive = false;
+        };
+    }, [currentUser.uid, userId, isOwnProfile]);
+
     // Subscribe to posts of the visited profile user
     useEffect(() => {
         setRecentPosts([]);
@@ -101,6 +153,27 @@ export default function PublicProfileScreen({
         profile?.name ||
         profile?.username ||
         'Unknown User';
+
+    const handleAddFriend = async () => {
+        if (sendingRequest || connectionStatus || isOwnProfile) return;
+
+        setSendingRequest(true);
+
+        try {
+            await sendFriendRequest(currentUser.uid, userId);
+            setConnectionStatus('pending_sent');
+        } catch (error) {
+            console.error('Friend request error:', error);
+
+            if (typeof window !== 'undefined') {
+                window.alert('Could not send friend request. Please try again.');
+            } else {
+                Alert.alert('LinkUp', 'Could not send friend request. Please try again.');
+            }
+        } finally {
+            setSendingRequest(false);
+        }
+    };
 
     const renderInfo = (label: string, value?: string) => {
         if (!value?.trim()) return null;
@@ -170,7 +243,7 @@ export default function PublicProfileScreen({
             showsVerticalScrollIndicator={false}
         >
             <Pressable style={styles.backButton} onPress={onBack}>
-                <Text style={styles.backButtonText}>Back to friends</Text>
+                <Text style={styles.backButtonText}>Back</Text>
             </Pressable>
 
             <View style={styles.profileCard}>
@@ -212,6 +285,40 @@ export default function PublicProfileScreen({
                     <Text style={styles.friendCount}>
                         {profile.friendsCount || 0} friends
                     </Text>
+                    {!isOwnProfile &&
+                        !connectionLoading &&
+                        connectionStatus !== 'accepted' && (
+                            <View style={styles.friendButtonContainer}>
+                                {connectionStatus === 'pending_sent' ||
+                                    connectionStatus === 'pending_received' ? (
+                                    <View style={styles.requestStatusButton}>
+                                        <Text style={styles.requestStatusText}>
+                                            {connectionStatus === 'pending_sent'
+                                                ? 'Request Sent'
+                                                : 'Request Received'}
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <ShineButton
+                                        onPress={handleAddFriend}
+                                        disabled={sendingRequest}
+                                        style={styles.addFriendButton}
+                                        accessibilityLabel="Add friend"
+                                    >
+                                        {sendingRequest ? (
+                                            <ActivityIndicator
+                                                size="small"
+                                                color={Colors.surface}
+                                            />
+                                        ) : (
+                                            <Text style={styles.addFriendText}>
+                                                + Add Friend
+                                            </Text>
+                                        )}
+                                    </ShineButton>
+                                )}
+                            </View>
+                        )}
                 </View>
             </View>
 
@@ -487,5 +594,42 @@ const styles = StyleSheet.create({
         padding: Spacing.lg,
         backgroundColor: Colors.surface,
         borderRadius: Radius.medium,
+    },
+    friendButtonContainer: {
+        marginTop: Spacing.md,
+        alignItems: 'center',
+    },
+
+    addFriendButton: {
+        minWidth: 150,
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.sm,
+        borderRadius: Radius.medium,
+        backgroundColor: Colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    addFriendText: {
+        fontFamily: Fonts.bold,
+        fontSize: 13,
+        color: Colors.surface,
+    },
+
+    requestStatusButton: {
+        minWidth: 150,
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.sm,
+        borderRadius: Radius.medium,
+        backgroundColor: Colors.background,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        alignItems: 'center',
+    },
+
+    requestStatusText: {
+        fontFamily: Fonts.bold,
+        fontSize: 13,
+        color: Colors.textSecondary,
     },
 });

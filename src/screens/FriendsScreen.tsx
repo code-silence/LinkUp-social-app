@@ -437,9 +437,9 @@ export default function FriendsScreen({
             case 'Friend Requests':
                 return 'You have no pending friend requests.';
             case 'Sent Requests':
-                return 'You have no sent requests.';
+                return 'Hmm..looks like you haven\'t sent any friend requests yet.';
             case 'Your Friends':
-                return "You haven't added any friends yet.";
+                return "Opps.. It's quiet here.";
         }
     };
 

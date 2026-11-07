@@ -11,7 +11,11 @@ import {
     serverTimestamp,
     updateDoc,
     increment,
+    onSnapshot,
+    limit,
 } from 'firebase/firestore';
+
+
 import { UserProfile } from './user';
 import { sendNotification } from './notifications';
 
@@ -43,10 +47,10 @@ export const getSuggestions = async (currentUserId: string): Promise<UserProfile
         const suggestions: UserProfile[] = [];
         querySnapshot.forEach((docSnap) => {
             const userData = { ...docSnap.data(), uid: docSnap.id } as UserProfile;
-            
+
             if (
-                userData.uid && 
-                userData.uid !== currentUserId && 
+                userData.uid &&
+                userData.uid !== currentUserId &&
                 !existingConnectionIds.has(userData.uid)
             ) {
                 suggestions.push(userData);
@@ -87,12 +91,31 @@ export const sendFriendRequest = async (currentUserId: string, targetUserId: str
     }
 };
 
+export const getConnectionStatus = async (
+    currentUserId: string,
+    targetUserId: string,
+): Promise<ConnectionStatus | null> => {
+    const connectionRef = doc(
+        db,
+        'users',
+        currentUserId,
+        'connections',
+        targetUserId,
+    );
+
+    const snapshot = await getDoc(connectionRef);
+
+    if (!snapshot.exists()) return null;
+
+    return snapshot.data().status as ConnectionStatus;
+};
+
 /**
  * Accept a friend request, update connections, and increment friendsCount for both users
  */
 export const acceptFriendRequest = async (
-    currentUserId: string, 
-    requesterId: string, 
+    currentUserId: string,
+    requesterId: string,
     currentUserProfile?: UserProfile
 ): Promise<void> => {
     if (!currentUserId || !requesterId) throw new Error("Missing user ID");
@@ -181,7 +204,7 @@ export const removeConnection = async (currentUserId: string, targetUserId: stri
  * Fetch users based on their connection status
  */
 export const getUsersByConnectionStatus = async (
-    currentUserId: string, 
+    currentUserId: string,
     desiredStatus: ConnectionStatus
 ): Promise<UserProfile[]> => {
     try {
@@ -202,7 +225,7 @@ export const getUsersByConnectionStatus = async (
         const users: UserProfile[] = [];
         for (const uid of userIds) {
             if (!uid) continue;
-            
+
             const userRef = doc(db, 'users', uid);
             const userSnap = await getDoc(userRef);
             if (userSnap.exists()) {
@@ -215,4 +238,38 @@ export const getUsersByConnectionStatus = async (
         console.error(`Error fetching users with status ${desiredStatus}:`, error);
         throw error;
     }
+};
+
+/**
+ * Subscribe to whether the current user has pending received friend requests.
+ * Only listens to one matching document because the UI needs a boolean.
+ */
+export const subscribeToPendingFriendRequests = (
+    currentUserId: string,
+    onChange: (hasPending: boolean) => void,
+    onError?: (error: Error) => void,
+) => {
+    const connectionsRef = collection(
+        db,
+        'users',
+        currentUserId,
+        'connections',
+    );
+
+    const q = query(
+        connectionsRef,
+        where('status', '==', 'pending_received'),
+        limit(1),
+    );
+
+    return onSnapshot(
+        q,
+        snapshot => {
+            onChange(!snapshot.empty);
+        },
+        error => {
+            console.error('Pending friend requests listener error:', error);
+            onError?.(error);
+        },
+    );
 };

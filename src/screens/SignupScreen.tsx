@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useWindowDimensions } from 'react-native';
 import {
     View,
@@ -9,11 +10,163 @@ import {
     StyleSheet,
     ScrollView,
     ActivityIndicator,
+    Animated,
+    Easing,
 } from 'react-native';
 
-import { Colors, Radius, Spacing } from '../theme';
+import { Colors, Radius } from '../theme';
 import { registerUser } from '../services/auth';
 import logo from '../assets/logo.png';
+
+// LETTER-BY-LETTER ANIMATION
+
+interface AnimatedLettersProps {
+    text: string;
+    style: any;
+    duration?: number;
+    stagger?: number;
+    delay?: number;
+    loop?: boolean;
+    pop?: boolean;
+}
+
+function AnimatedLetters({
+    text,
+    style,
+    duration = 300,
+    stagger = 80,
+    delay = 0,
+    loop = false,
+    pop = false,
+}: AnimatedLettersProps) {
+    const letters = Array.from(text);
+
+    const animations = useRef(
+        letters.map(() => new Animated.Value(0))
+    ).current;
+
+    const scale = useRef(
+        new Animated.Value(pop ? 0.5 : 1)
+    ).current;
+
+    useEffect(() => {
+        const reveal = () =>
+            Animated.stagger(
+                stagger,
+                animations.map(value =>
+                    Animated.timing(value, {
+                        toValue: 1,
+                        duration,
+                        useNativeDriver: true,
+                    })
+                )
+            );
+
+        const initialAnimation = Animated.sequence([
+            Animated.delay(delay),
+
+            ...(pop
+                ? [
+                    Animated.spring(scale, {
+                        toValue: 1,
+                        speed: 12,
+                        bounciness: 14,
+                        useNativeDriver: true,
+                    }),
+                ]
+                : []),
+
+            reveal(),
+        ]);
+
+        let repeatAnimation: Animated.CompositeAnimation | undefined;
+
+        initialAnimation.start(({ finished }) => {
+            if (finished && loop) {
+                repeatAnimation = Animated.loop(
+                    Animated.sequence([
+                        Animated.delay(5000),
+
+                        Animated.parallel(
+                            animations.map(value =>
+                                Animated.timing(value, {
+                                    toValue: 0,
+                                    duration: 1,
+                                    useNativeDriver: true,
+                                })
+                            )
+                        ),
+
+                        reveal(),
+                    ])
+                );
+
+                repeatAnimation.start();
+            }
+        });
+
+        return () => {
+            initialAnimation.stop();
+            repeatAnimation?.stop();
+        };
+    }, []);
+
+    return (
+        <Animated.View
+            style={{
+                transform: [{ scale }],
+            }}
+        >
+            <Animated.Text style={style}>
+                {letters.map((letter, index) => (
+                    <Animated.Text
+                        key={index}
+                        style={{ opacity: animations[index] }}
+                    >
+                        {letter === ' ' ? '\u00A0' : letter}
+                    </Animated.Text>
+                ))}
+            </Animated.Text>
+        </Animated.View>
+    );
+}
+
+// FADE-IN ANIMATION
+
+function AnimatedFadeIn({
+    children,
+    delay = 0,
+}: {
+    children: React.ReactNode;
+    delay?: number;
+}) {
+    const opacity = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        const animation = Animated.sequence([
+            Animated.delay(delay),
+
+            Animated.timing(opacity, {
+                toValue: 1,
+                duration: 1200,
+                easing: Easing.out(Easing.ease),
+                useNativeDriver: true,
+            }),
+        ]);
+
+        animation.start();
+
+        return () => animation.stop();
+    }, []);
+
+    return (
+        <Animated.View style={{ opacity }}>
+            {children}
+        </Animated.View>
+    );
+}
+
+// SIGNUP SCREEN
 
 interface Props {
     onNavigateLogin?: () => void;
@@ -28,8 +181,49 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
     const { width } = useWindowDimensions();
     const isDesktop = width >= 800;
+
+    // ANIMATION VALUES
+
+    const formAnim = useRef(new Animated.Value(0)).current;
+    const circleAnim = useRef(new Animated.Value(0)).current;
+    const buttonScale = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        Animated.timing(formAnim, {
+            toValue: 1,
+            duration: 1000,
+            delay: 900,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+        }).start();
+
+        const floatingAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(circleAnim, {
+                    toValue: 1,
+                    duration: 3000,
+                    easing: Easing.inOut(Easing.ease),
+                    useNativeDriver: true,
+                }),
+
+                Animated.timing(circleAnim, {
+                    toValue: 0,
+                    duration: 3000,
+                    easing: Easing.inOut(Easing.ease),
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        floatingAnimation.start();
+
+        return () => floatingAnimation.stop();
+    }, []);
+
+    // SIGNUP FUNCTION - UNCHANGED
 
     const handleSignup = async () => {
         setError('');
@@ -70,6 +264,17 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
         }
     };
 
+    // BUTTON ANIMATION
+
+    const animateButton = (pressed: boolean) => {
+        Animated.spring(buttonScale, {
+            toValue: pressed ? 0.97 : 1,
+            useNativeDriver: true,
+            speed: 30,
+            bounciness: 5,
+        }).start();
+    };
+
     return (
         <ScrollView
             contentContainerStyle={[
@@ -78,30 +283,116 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
             ]}
             keyboardShouldPersistTaps="handled"
         >
+            {/* BRANDING SECTION */}
+
             <View
                 style={[
                     styles.brandPanel,
                     isDesktop && styles.desktopBrandPanel,
                 ]}
             >
-                <View style={styles.logoContainer}>
-                    <Image
-                        source={logo}
-                        style={styles.logoImage}
-                        resizeMode="contain"
+                {/* FLOATING CIRCLES */}
+
+                <Animated.View
+                    style={[
+                        styles.decorCircleOne,
+                        {
+                            transform: [
+                                {
+                                    translateY: circleAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0, 25],
+                                    }),
+                                },
+                                {
+                                    scale: circleAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [1, 1.08],
+                                    }),
+                                },
+                            ],
+                        },
+                    ]}
+                />
+
+                <Animated.View
+                    style={[
+                        styles.decorCircleTwo,
+                        {
+                            transform: [
+                                {
+                                    translateY: circleAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0, -20],
+                                    }),
+                                },
+                            ],
+                        },
+                    ]}
+                />
+
+                <View style={styles.brandContent}>
+
+                    {/* LOGO */}
+
+                    <AnimatedFadeIn delay={0}>
+                        <View style={styles.logoContainer}>
+                            <Image
+                                source={logo}
+                                style={styles.logoImage}
+                                resizeMode="contain"
+                            />
+                        </View>
+                    </AnimatedFadeIn>
+
+                    {/* BRAND NAME */}
+
+                    <AnimatedLetters
+                        text="LinkUp!"
+                        style={styles.brandName}
+                        duration={300}
+                        stagger={90}
+                        delay={1200}
+                        pop
+                        loop
                     />
+
+                    {/* MOTTO */}
+
+                    <AnimatedLetters
+                        text={'Your people.\nYour moments.'}
+                        style={styles.brandTitle}
+                        duration={450}
+                        stagger={75}
+                        delay={2000}
+                    />
+
+                    {/* DESCRIPTION */}
+
+                    <AnimatedFadeIn delay={4800}>
+                        <Text style={styles.brandDescription}>
+                            Start building connections and sharing your world.
+                        </Text>
+                    </AnimatedFadeIn>
+
+                    {/* FOOTER */}
+
+                    {isDesktop && (
+                        <AnimatedFadeIn delay={5600}>
+                            <View style={styles.brandFooter}>
+                                <View style={styles.brandDot} />
+
+                                <Text style={styles.brandFooterText}>
+                                    Connect beyond boundaries.
+                                </Text>
+                            </View>
+                        </AnimatedFadeIn>
+                    )}
+
                 </View>
-
-                <Text style={styles.brandName}>LinkUp</Text>
-
-                <Text style={styles.brandTitle}>
-                    Your people.{'\n'}Your moments.
-                </Text>
-
-                <Text style={styles.brandDescription}>
-                    Start building connections and sharing your world.
-                </Text>
             </View>
+
+            {/* SIGNUP SECTION */}
 
             <View
                 style={[
@@ -109,17 +400,40 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                     isDesktop && styles.desktopFormPanel,
                 ]}
             >
-                <View style={styles.formContent}>
-                    <Text style={styles.welcomeLabel}>JOIN LINKUP</Text>
+                <Animated.View
+                    style={[
+                        styles.formContent,
+                        {
+                            opacity: formAnim,
+                            transform: [
+                                {
+                                    translateY: formAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [35, 0],
+                                    }),
+                                },
+                            ],
+                        },
+                    ]}
+                >
+                    <Text style={styles.welcomeLabel}>
+                        JOIN LINKUP
+                    </Text>
 
-                    <Text style={styles.heading}>Create account</Text>
+                    <Text style={styles.heading}>
+                        Create account
+                    </Text>
 
                     <Text style={styles.subheading}>
                         Your next connection starts here.
                     </Text>
 
+                    {/* NAME */}
+
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Full name</Text>
+                        <Text style={styles.label}>
+                            Full name
+                        </Text>
 
                         <TextInput
                             style={styles.input}
@@ -131,8 +445,12 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                         />
                     </View>
 
+                    {/* EMAIL */}
+
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Email address</Text>
+                        <Text style={styles.label}>
+                            Email address
+                        </Text>
 
                         <TextInput
                             style={styles.input}
@@ -146,8 +464,12 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                         />
                     </View>
 
+                    {/* PASSWORD */}
+
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Password</Text>
+                        <Text style={styles.label}>
+                            Password
+                        </Text>
 
                         <TextInput
                             style={styles.input}
@@ -159,9 +481,13 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                         />
                     </View>
 
+                    {/* CONFIRM PASSWORD */}
+
                     <View style={styles.inputGroup}>
                         <View style={styles.passwordHeader}>
-                            <Text style={styles.label}>Confirm password</Text>
+                            <Text style={styles.label}>
+                                Confirm password
+                            </Text>
 
                             <Pressable
                                 onPress={() => setShowPassword(!showPassword)}
@@ -183,27 +509,42 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                         />
                     </View>
 
+                    {/* ERROR */}
+
                     {error !== '' && (
-                        <Text style={styles.error}>{error}</Text>
+                        <Text style={styles.error}>
+                            {error}
+                        </Text>
                     )}
+
+                    {/* SIGNUP BUTTON */}
 
                     <Pressable
                         onPress={handleSignup}
+                        onPressIn={() => animateButton(true)}
+                        onPressOut={() => animateButton(false)}
                         disabled={loading}
-                        style={({ pressed }) => [
-                            styles.signupButton,
-                            pressed && styles.pressed,
-                            loading && styles.disabled,
-                        ]}
                     >
-                        {loading ? (
-                            <ActivityIndicator color="#FFFFFF" />
-                        ) : (
-                            <Text style={styles.signupButtonText}>
-                                Create account
-                            </Text>
-                        )}
+                        <Animated.View
+                            style={[
+                                styles.signupButton,
+                                {
+                                    transform: [{ scale: buttonScale }],
+                                },
+                                loading && styles.disabled,
+                            ]}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.signupButtonText}>
+                                    Create account
+                                </Text>
+                            )}
+                        </Animated.View>
                     </Pressable>
+
+                    {/* LOGIN LINK */}
 
                     <View style={styles.loginContainer}>
                         <Text style={styles.loginText}>
@@ -211,19 +552,22 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
                         </Text>
 
                         <Pressable onPress={onNavigateLogin}>
-                            <Text style={styles.loginLink}> Sign in</Text>
+                            <Text style={styles.loginLink}>
+                                {' '}Sign in
+                            </Text>
                         </Pressable>
                     </View>
 
                     <Text style={styles.bottomText}>
                         Made for connections that matter.
                     </Text>
-                </View>
+                </Animated.View>
             </View>
         </ScrollView>
     );
-
 }
+
+// STYLES
 
 const styles = StyleSheet.create({
     container: {
@@ -231,11 +575,30 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.background,
     },
 
+    desktopContainer: {
+        flexDirection: 'row',
+        minHeight: '100%',
+    },
+
+    // BRANDING
+
     brandPanel: {
         backgroundColor: Colors.primaryDark,
         padding: 32,
         minHeight: 230,
         justifyContent: 'center',
+        overflow: 'hidden',
+    },
+
+    desktopBrandPanel: {
+        flex: 1,
+        minHeight: '100%',
+        paddingHorizontal: 55,
+    },
+
+    brandContent: {
+        zIndex: 2,
+        maxWidth: 480,
     },
 
     logoContainer: {
@@ -245,13 +608,13 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.accent,
         alignItems: 'center',
         justifyContent: 'center',
+        marginBottom: 10,
     },
 
-    logo: {
-        fontFamily: 'Lato',
-        fontWeight: '900',
-        fontSize: 27,
-        color: Colors.primaryDark,
+    logoImage: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
     },
 
     brandName: {
@@ -259,7 +622,8 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         fontSize: 21,
         color: '#FFFFFF',
-        marginTop: 10,
+        marginTop: 0,
+        marginBottom: 15,
     },
 
     brandTitle: {
@@ -268,21 +632,75 @@ const styles = StyleSheet.create({
         fontSize: 30,
         lineHeight: 36,
         color: '#FFFFFF',
-        marginTop: 15,
+        marginTop: 0,
+        marginBottom: 10,
     },
 
     brandDescription: {
         fontFamily: 'Lato',
         fontSize: 14,
+        lineHeight: 22,
         color: Colors.accent,
-        marginTop: 10,
+        marginTop: 0,
     },
+
+    brandFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 55,
+    },
+
+    brandDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: Colors.accent,
+        marginRight: 10,
+    },
+
+    brandFooterText: {
+        fontFamily: 'Lato',
+        fontSize: 13,
+        color: Colors.accent,
+    },
+
+    decorCircleOne: {
+        position: 'absolute',
+        width: 350,
+        height: 350,
+        borderRadius: 175,
+        borderWidth: 1,
+        borderColor: 'rgba(216,197,232,0.12)',
+        right: -150,
+        top: -100,
+    },
+
+    decorCircleTwo: {
+        position: 'absolute',
+        width: 260,
+        height: 260,
+        borderRadius: 130,
+        borderWidth: 1,
+        borderColor: 'rgba(216,197,232,0.12)',
+        right: -100,
+        bottom: -100,
+    },
+
+    // FORM
 
     formPanel: {
         flex: 1,
         alignItems: 'center',
         paddingHorizontal: 28,
         paddingVertical: 40,
+        backgroundColor: Colors.background,
+    },
+
+    desktopFormPanel: {
+        flex: 1,
+        justifyContent: 'center',
+        paddingHorizontal: 50,
+        paddingVertical: 50,
     },
 
     formContent: {
@@ -360,6 +778,8 @@ const styles = StyleSheet.create({
         marginBottom: 15,
     },
 
+    // BUTTON
+
     signupButton: {
         height: 54,
         borderRadius: Radius.medium,
@@ -376,13 +796,11 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
     },
 
-    pressed: {
-        opacity: 0.85,
-    },
-
     disabled: {
         opacity: 0.7,
     },
+
+    // LOGIN LINK
 
     loginContainer: {
         flexDirection: 'row',
@@ -410,28 +828,5 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         textAlign: 'center',
         marginTop: 45,
-    },
-
-    logoImage: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-    },
-    desktopContainer: {
-        flexDirection: 'row',
-        minHeight: '100%',
-    },
-
-    desktopBrandPanel: {
-        flex: 1,
-        minHeight: '100%',
-        paddingHorizontal: 55,
-    },
-
-    desktopFormPanel: {
-        flex: 1,
-        justifyContent: 'center',
-        paddingHorizontal: 50,
-        paddingVertical: 50,
     },
 });

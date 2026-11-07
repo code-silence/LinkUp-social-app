@@ -152,7 +152,7 @@ export default function NotificationsScreen({
                     <View style={styles.emptyIconWrapper}>
                         <Text style={styles.emptyIcon}>🔔</Text>
                     </View>
-                    <Text style={styles.emptyTitle}>No notifications yet</Text>
+                    <Text style={styles.emptyTitle}>Uh oh! No notifications yet</Text>
                     <Text style={styles.emptyDescription}>
                         When someone likes or comments on your posts, you'll see it here.
                     </Text>
