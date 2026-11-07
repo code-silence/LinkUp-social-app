@@ -10,11 +10,14 @@ import {
     serverTimestamp,
     getFirestore,
     getDocs,
+    getDoc,
     where,
     increment,
     updateDoc,
 } from 'firebase/firestore';
+
 import { sendNotification } from './notifications';
+import { getAuth } from 'firebase/auth';
 
 const db = getFirestore();
 
@@ -76,6 +79,107 @@ export const createPost = async (
         throw error;
     }
 };
+
+/**
+ * Delete an existing post and its comments/reactions (author only)
+ */
+export const deletePost = async (
+    postId: string,
+    userId: string
+): Promise<void> => {
+    try {
+        const currentUserId = getAuth().currentUser?.uid;
+
+        if (!currentUserId || currentUserId !== userId) {
+            throw new Error('Unauthorized: You cannot delete this post.');
+        }
+
+        const postRef = doc(db, 'posts', postId);
+        const postSnap = await getDoc(postRef);
+
+        if (!postSnap.exists()) {
+            throw new Error('Post not found.');
+        }
+
+        if (postSnap.data().authorId !== userId) {
+            throw new Error('You can only delete your own posts.');
+        }
+
+        // Get associated comments and reactions
+        const commentsRef = collection(db, 'posts', postId, 'comments');
+        const reactionsRef = collection(db, 'posts', postId, 'reactions');
+
+        const [commentsSnap, reactionsSnap] = await Promise.all([
+            getDocs(commentsRef),
+            getDocs(reactionsRef),
+        ]);
+
+        // Delete all comments and reactions
+        await Promise.all([
+            ...commentsSnap.docs.map(comment =>
+                deleteDoc(comment.ref)
+            ),
+            ...reactionsSnap.docs.map(reaction =>
+                deleteDoc(reaction.ref)
+            ),
+        ]);
+
+        // Finally delete the post
+        await deleteDoc(postRef);
+
+    } catch (error) {
+        console.error('Error deleting post:', error);
+        throw error;
+    }
+};
+
+/**
+ * Edit an existing post (author only)
+ */
+export const editPost = async (
+    postId: string,
+    userId: string,
+    updates: {
+        text: string;
+        imageURL?: string;
+    }
+): Promise<void> => {
+    try {
+        const currentUserId = getAuth().currentUser?.uid;
+
+        if (!currentUserId || currentUserId !== userId) {
+            throw new Error('Unauthorized: You cannot edit this post.');
+        }
+
+        const postRef = doc(db, 'posts', postId);
+        const postSnap = await getDoc(postRef);
+
+        if (!postSnap.exists()) {
+            throw new Error('Post not found.');
+        }
+
+        if (postSnap.data().authorId !== userId) {
+            throw new Error('You can only edit your own posts.');
+        }
+
+        const data: { text: string; imageURL?: string } = {
+            text: updates.text,
+        };
+
+        // undefined = keep existing image
+        // '' = remove existing image
+        if (updates.imageURL !== undefined) {
+            data.imageURL = updates.imageURL;
+        }
+
+        await updateDoc(postRef, data);
+    } catch (error) {
+        console.error('Error editing post:', error);
+        throw error;
+    }
+};
+
+
 
 /**
  * Subscribe to global feed posts in real-time
