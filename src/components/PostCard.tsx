@@ -928,6 +928,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: Spacing.sm,
+        flex: 1,
+        minWidth: 0,
     },
     avatar: {
         backgroundColor: Colors.accent,
@@ -947,6 +949,7 @@ const styles = StyleSheet.create({
     },
     authorInfo: {
         flex: 1,
+        minWidth: 0,
     },
     authorName: {
         fontFamily: Fonts.bold,
@@ -1314,11 +1317,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: Spacing.sm,
+        width: '100%',
     },
     ownerActions: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: Spacing.xs,
+        flexShrink: 0,
     },
     ownerActionButton: {
         paddingHorizontal: Spacing.sm,
