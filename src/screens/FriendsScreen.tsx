@@ -15,7 +15,6 @@ import {
 
 import { User } from 'firebase/auth';
 import { UserProfile, getUserProfile } from '../services/user';
-import ShineButton from '../components/ShineButton';
 import {
     getSuggestions,
     getUsersByConnectionStatus,
@@ -354,36 +353,34 @@ export default function FriendsScreen({
 
                     <View style={styles.cardActions}>
                         {activeTab === 'Suggestions' && (
-                            <ShineButton
+                            <Pressable
                                 style={[
                                     styles.primaryButton,
                                     isProcessing && styles.buttonDisabled,
                                 ]}
                                 onPress={() => handleAddFriend(profile)}
                                 disabled={isProcessing}
-                                accessibilityLabel={`Add ${displayName} as a friend`}
                             >
                                 <Text style={styles.primaryButtonText}>
                                     {isProcessing ? 'Sending...' : 'Add friend'}
                                 </Text>
-                            </ShineButton>
+                            </Pressable>
                         )}
 
                         {activeTab === 'Friend Requests' && (
                             <View style={styles.actionGroup}>
-                                <ShineButton
+                                <Pressable
                                     style={[
                                         styles.primaryButton,
                                         isProcessing && styles.buttonDisabled,
                                     ]}
                                     onPress={() => handleAccept(profile)}
                                     disabled={isProcessing}
-                                    accessibilityLabel={`Accept ${displayName}'s friend request`}
                                 >
                                     <Text style={styles.primaryButtonText}>
                                         {isProcessing ? 'Accepting...' : 'Accept'}
                                     </Text>
-                                </ShineButton>
+                                </Pressable>
 
                                 <Pressable
                                     style={[
