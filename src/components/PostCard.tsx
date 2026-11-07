@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { Colors, Fonts, Radius, Spacing } from '../theme';
+import ShineButton from '../components/ShineButton';
 import {
     addPostComment,
     Post,
@@ -511,7 +512,7 @@ export default function PostCard({
                                     maxLength={1000}
                                 />
 
-                                <Pressable
+                                <ShineButton
                                     onPress={handleComment}
                                     disabled={!commentText.trim() || submittingComment}
                                     style={[
@@ -519,6 +520,7 @@ export default function PostCard({
                                         (!commentText.trim() || submittingComment) &&
                                         styles.sendButtonDisabled,
                                     ]}
+                                    accessibilityLabel="Send comment"
                                 >
                                     {submittingComment ? (
                                         <ActivityIndicator
@@ -528,7 +530,7 @@ export default function PostCard({
                                     ) : (
                                         <Text style={styles.sendButtonText}>Send</Text>
                                     )}
-                                </Pressable>
+                                </ShineButton>
                             </View>
                         </View>
                     </Pressable>

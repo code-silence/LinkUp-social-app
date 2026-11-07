@@ -8,7 +8,9 @@ import {
     query,
     where,
     getFirestore,
-    serverTimestamp
+    serverTimestamp,
+    updateDoc,
+    increment,
 } from 'firebase/firestore';
 import { UserProfile } from './user';
 import { sendNotification } from './notifications';
@@ -86,7 +88,7 @@ export const sendFriendRequest = async (currentUserId: string, targetUserId: str
 };
 
 /**
- * Accept a friend request & send a notification to the requester
+ * Accept a friend request, update connections, and increment friendsCount for both users
  */
 export const acceptFriendRequest = async (
     currentUserId: string, 
@@ -111,6 +113,17 @@ export const acceptFriendRequest = async (
             timestamp: timestamp
         }, { merge: true });
 
+        // Increment friendsCount for both users safely
+        const currentUserDocRef = doc(db, 'users', currentUserId);
+        const currentUserSnap = await getDoc(currentUserDocRef);
+        const currentCount1 = currentUserSnap.exists() ? (currentUserSnap.data().friendsCount || 0) : 0;
+        await updateDoc(currentUserDocRef, { friendsCount: currentCount1 + 1 });
+
+        const requesterDocRef = doc(db, 'users', requesterId);
+        const requesterSnap = await getDoc(requesterDocRef);
+        const currentCount2 = requesterSnap.exists() ? (requesterSnap.data().friendsCount || 0) : 0;
+        await updateDoc(requesterDocRef, { friendsCount: currentCount2 + 1 });
+
         // Send notification to the requester that their request was accepted
         await sendNotification(requesterId, {
             senderId: currentUserId,
@@ -127,16 +140,37 @@ export const acceptFriendRequest = async (
 };
 
 /**
- * Remove or decline a connection between users
+ * Remove or decline a connection between users & decrement friendsCount safely (ensuring it never goes below 0)
  */
 export const removeConnection = async (currentUserId: string, targetUserId: string): Promise<void> => {
     if (!currentUserId || !targetUserId) throw new Error("Missing user ID");
     try {
         const currentUserRef = doc(db, 'users', currentUserId, 'connections', targetUserId);
+        const docSnap = await getDoc(currentUserRef);
+        const wasAccepted = docSnap.exists() && docSnap.data().status === 'accepted';
+
         await deleteDoc(currentUserRef);
 
         const targetUserRef = doc(db, 'users', targetUserId, 'connections', currentUserId);
         await deleteDoc(targetUserRef);
+
+        if (wasAccepted) {
+            // Decrement friendsCount safely for current user (minimum 0)
+            const currentUserDocRef = doc(db, 'users', currentUserId);
+            const currentUserSnap = await getDoc(currentUserDocRef);
+            if (currentUserSnap.exists()) {
+                const currentCount = currentUserSnap.data().friendsCount || 0;
+                await updateDoc(currentUserDocRef, { friendsCount: Math.max(0, currentCount - 1) });
+            }
+
+            // Decrement friendsCount safely for target user (minimum 0)
+            const targetUserDocRef = doc(db, 'users', targetUserId);
+            const targetUserSnap = await getDoc(targetUserDocRef);
+            if (targetUserSnap.exists()) {
+                const targetCount = targetUserSnap.data().friendsCount || 0;
+                await updateDoc(targetUserDocRef, { friendsCount: Math.max(0, targetCount - 1) });
+            }
+        }
     } catch (error) {
         console.error('Error removing connection:', error);
         throw error;

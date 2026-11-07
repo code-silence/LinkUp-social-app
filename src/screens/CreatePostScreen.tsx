@@ -18,6 +18,7 @@ import { Colors, Fonts, Radius, Spacing } from '../theme';
 import { getUserProfile } from '../services/user';
 import { uploadImageToHost } from '../services/imageUpload';
 import { createPost, PostAuthor } from '../services/posts';
+import ShineButton from '../components/ShineButton';
 
 interface Props {
     user: User;
@@ -264,7 +265,7 @@ export default function CreatePostScreen({
                     </Text>
                 </View>
 
-                <Pressable
+                <ShineButton
                     onPress={handlePost}
                     disabled={posting || (!caption.trim() && !imageFile)}
                     style={[
@@ -272,6 +273,7 @@ export default function CreatePostScreen({
                         (posting || (!caption.trim() && !imageFile)) &&
                         styles.postButtonDisabled,
                     ]}
+                    accessibilityLabel="Publish post"
                 >
                     {posting ? (
                         <View style={styles.loadingRow}>
@@ -285,7 +287,7 @@ export default function CreatePostScreen({
                             Publish post
                         </Text>
                     )}
-                </Pressable>
+                </ShineButton>
             </View>
 
             <View style={styles.tip}>
