@@ -385,14 +385,14 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
             instagram: profile.instagram,
             linkedin: profile.linkedin,
 
-            interests: profile.interests,
-            languages: profile.languages,
+            interests: profile.interests ?? [],
+            languages: profile.languages ?? [],
         });
 
         setNotice('');
         setError('');
-        setInterestsInput(profile.interests.join(', '));
-        setLanguagesInput(profile.languages.join(', '));
+        setInterestsInput((profile.interests ?? []).join(', '));
+        setLanguagesInput((profile.languages ?? []).join(', '));
         setEditVisible(true);
     };
 
@@ -689,8 +689,7 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
 
                                 <View style={styles.stat}>
                                     <Text style={styles.statNumber}>
-                                        {profile.interests.length}
-                                    </Text>
+                                        {profile.interests?.length ?? 0}                                    </Text>
                                     <Text style={styles.statLabel}>
                                         Interests
                                     </Text>
@@ -715,46 +714,44 @@ export default function ProfileScreen({ user, onProfileUpdate }: Props) {
                             </Text>
                         )}
 
-                        {profile.interests.length > 0 && (
-                            <View style={styles.infoSection}>
-                                <Text style={styles.infoHeading}>
-                                    Interests
-                                </Text>
+                        {(profile.interests?.length ?? 0) > 0 && (<View style={styles.infoSection}>
+                            <Text style={styles.infoHeading}>
+                                Interests
+                            </Text>
 
-                                <View style={styles.chipContainer}>
-                                    {profile.interests.map(item => (
-                                        <View
-                                            key={item}
-                                            style={styles.chip}
-                                        >
-                                            <Text style={styles.chipText}>
-                                                {item}
-                                            </Text>
-                                        </View>
-                                    ))}
-                                </View>
+                            <View style={styles.chipContainer}>
+                                {(profile.interests ?? []).map(item => (
+                                    <View
+                                        key={item}
+                                        style={styles.chip}
+                                    >
+                                        <Text style={styles.chipText}>
+                                            {item}
+                                        </Text>
+                                    </View>
+                                ))}
                             </View>
+                        </View>
                         )}
 
-                        {profile.languages.length > 0 && (
-                            <View style={styles.infoSection}>
-                                <Text style={styles.infoHeading}>
-                                    Languages
-                                </Text>
+                        {(profile.languages?.length ?? 0) > 0 && (<View style={styles.infoSection}>
+                            <Text style={styles.infoHeading}>
+                                Languages
+                            </Text>
 
-                                <View style={styles.chipContainer}>
-                                    {profile.languages.map(item => (
-                                        <View
-                                            key={item}
-                                            style={styles.chip}
-                                        >
-                                            <Text style={styles.chipText}>
-                                                {item}
-                                            </Text>
-                                        </View>
-                                    ))}
-                                </View>
+                            <View style={styles.chipContainer}>
+                                {(profile.languages ?? []).map(item => (
+                                    <View
+                                        key={item}
+                                        style={styles.chip}
+                                    >
+                                        <Text style={styles.chipText}>
+                                            {item}
+                                        </Text>
+                                    </View>
+                                ))}
                             </View>
+                        </View>
                         )}
 
                         <View style={styles.infoDivider} />
