@@ -4,6 +4,7 @@ import {
     Alert,
     Image,
     Modal,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -12,10 +13,14 @@ import {
     View,
 } from 'react-native';
 
+import { launchImageLibrary } from 'react-native-image-picker';
+
 import { Colors, Fonts, Radius, Spacing } from '../theme';
 import ShineButton from '../components/ShineButton';
 import {
     addPostComment,
+    deletePost,
+    editPost,
     Post,
     PostAuthor,
     PostComment,
@@ -26,6 +31,8 @@ import {
     subscribeToPostReactions,
     subscribeToUserReaction,
 } from '../services/posts';
+
+import { uploadImageToHost } from '../services/imageUpload';
 
 interface Props {
     post: Post;
@@ -136,6 +143,16 @@ export default function PostCard({
     const [postReactions, setPostReactions] = useState<PostReactionWithAuthor[]>([]);
     const [reactionsLoading, setReactionsLoading] = useState(false);
 
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editText, setEditText] = useState('');
+    const [editImageFile, setEditImageFile] = useState<File | null>(null);
+    const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+    const [removeExistingImage, setRemoveExistingImage] = useState(false);
+    const [savingEdit, setSavingEdit] = useState(false);
+    const [deletingPost, setDeletingPost] = useState(false);
+
+    const isPostOwner = currentUser.uid === post.authorId;
+
     useEffect(() => {
         return subscribeToUserReaction(
             post.id,
@@ -235,32 +252,207 @@ export default function PostCard({
         setImageScale(1);
     };
 
+    const openEditModal = () => {
+        setEditText(post.text || '');
+        setEditImageFile(null);
+        setEditImagePreview(post.imageURL || null);
+        setRemoveExistingImage(false);
+        setShowEditModal(true);
+    };
+
+    const selectEditImage = async () => {
+        if (Platform.OS === 'web') {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/jpeg,image/png,image/webp';
+
+            input.onchange = () => {
+                const file = input.files?.[0];
+                if (!file) return;
+
+                if (file.size > 5 * 1024 * 1024) {
+                    showMessage('Image must be smaller than 5 MB.');
+                    return;
+                }
+
+                if (editImagePreview?.startsWith('blob:')) {
+                    URL.revokeObjectURL(editImagePreview);
+                }
+
+                setEditImageFile(file);
+                setEditImagePreview(URL.createObjectURL(file));
+                setRemoveExistingImage(false);
+            };
+
+            input.click();
+            return;
+        }
+
+        const result = await launchImageLibrary({
+            mediaType: 'photo',
+            selectionLimit: 1,
+        });
+
+        if (result.didCancel || !result.assets?.[0]?.uri) return;
+
+        const asset = result.assets[0];
+
+        try {
+            const response = await fetch(asset.uri!);
+            const blob = await response.blob();
+
+            if (blob.size > 5 * 1024 * 1024) {
+                showMessage('Image must be smaller than 5 MB.');
+                return;
+            }
+
+            const file = new File(
+                [blob],
+                asset.fileName || 'post-image.jpg',
+                { type: asset.type || 'image/jpeg' },
+            );
+
+            setEditImageFile(file);
+            setEditImagePreview(asset.uri!);
+            setRemoveExistingImage(false);
+        } catch (error) {
+            console.error('Image selection error:', error);
+            showMessage('Could not select this image. Please try again.');
+        }
+    };
+
+    const handleRemoveEditImage = () => {
+        if (editImagePreview?.startsWith('blob:')) {
+            URL.revokeObjectURL(editImagePreview);
+        }
+
+        setEditImageFile(null);
+        setEditImagePreview(null);
+        setRemoveExistingImage(true);
+    };
+
+    const handleSaveEdit = async () => {
+        if (savingEdit) return;
+
+        setSavingEdit(true);
+
+        try {
+            let imageURL: string | undefined;
+
+            if (editImageFile) {
+                imageURL = await uploadImageToHost(editImageFile);
+            } else if (removeExistingImage) {
+                imageURL = '';
+            }
+
+            await editPost(post.id, currentUser.uid, {
+                text: editText.trim(),
+                imageURL,
+            });
+
+            setShowEditModal(false);
+            showMessage('Post updated successfully.');
+        } catch (error) {
+            console.error('Edit post error:', error);
+            showMessage('Could not update your post. Please try again.');
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
+    const handleDeletePost = () => {
+        if (deletingPost) return;
+
+        const performDelete = async () => {
+            setDeletingPost(true);
+
+            try {
+                await deletePost(post.id, currentUser.uid);
+            } catch (error) {
+                console.error('Delete post error:', error);
+                showMessage('Could not delete your post. Please try again.');
+            } finally {
+                setDeletingPost(false);
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Are you sure you want to delete this post?')) {
+                performDelete();
+            }
+            return;
+        }
+
+        Alert.alert(
+            'Delete post',
+            'Are you sure you want to delete this post? This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: performDelete,
+                },
+            ],
+        );
+    };
+
     return (
         <View style={styles.card}>
             {/* Author section */}
+            {/* Author section */}
             <View style={styles.postHeader}>
-                <Pressable
-                    style={styles.authorSection}
-                    onPress={() => onViewProfile?.(post.authorId)}
-                >
-                    <Avatar author={post.author} />
+                <View style={styles.headerRow}>
+                    <Pressable
+                        style={styles.authorSection}
+                        onPress={() => onViewProfile?.(post.authorId)}
+                    >
+                        <Avatar author={post.author} />
 
-                    <View style={styles.authorInfo}>
-                        <Text style={styles.authorName}>
-                            {post.author.name || 'LinkUp User'}
-                        </Text>
+                        <View style={styles.authorInfo}>
+                            <Text style={styles.authorName}>
+                                {post.author.name || 'LinkUp User'}
+                            </Text>
 
-                        <Text style={styles.authorUsername}>
-                            @{post.author.username || 'user'}
-                        </Text>
+                            <Text style={styles.authorUsername}>
+                                @{post.author.username || 'user'}
+                            </Text>
 
-                        <Text style={styles.postDate}>
-                            {formatPostDate(post.createdAt)}
-                        </Text>
-                    </View>
-                </Pressable>
+                            <Text style={styles.postDate}>
+                                {formatPostDate(post.createdAt)}
+                            </Text>
+                        </View>
+                    </Pressable>
+
+                    {isPostOwner && (
+                        <View style={styles.ownerActions}>
+                            <Pressable
+                                onPress={openEditModal}
+                                style={styles.ownerActionButton}
+                            >
+                                <Text style={styles.editActionText}>Edit</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={handleDeletePost}
+                                disabled={deletingPost}
+                                style={styles.ownerActionButton}
+                            >
+                                {deletingPost ? (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color={Colors.danger}
+                                    />
+                                ) : (
+                                    <Text style={styles.deleteActionText}>
+                                        Delete
+                                    </Text>
+                                )}
+                            </Pressable>
+                        </View>
+                    )}
+                </View>
             </View>
-
             {/* Post caption */}
             {!!post.text && (
                 <Text style={styles.postText}>
@@ -383,6 +575,107 @@ export default function PostCard({
                     </Text>
                 </Pressable>
             </View>
+
+            {/* Edit post modal */}
+            <Modal
+                visible={showEditModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowEditModal(false)}
+            >
+                <View style={styles.editOverlay}>
+                    <View style={styles.editModal}>
+                        <View style={styles.editHeader}>
+                            <Text style={styles.editTitle}>Edit Post</Text>
+
+                            <Pressable
+                                onPress={() => setShowEditModal(false)}
+                            >
+                                <Text style={styles.commentsClose}>✕</Text>
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.divider} />
+
+                        <ScrollView
+                            style={styles.editContent}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            <TextInput
+                                value={editText}
+                                onChangeText={setEditText}
+                                placeholder="What's on your mind?"
+                                placeholderTextColor={Colors.textSecondary}
+                                multiline
+                                maxLength={5000}
+                                style={styles.editTextInput}
+                            />
+
+                            {editImagePreview && (
+                                <View style={styles.editImageContainer}>
+                                    <Image
+                                        source={{ uri: editImagePreview }}
+                                        style={styles.editImage}
+                                        resizeMode="contain"
+                                    />
+
+                                    <Pressable
+                                        onPress={handleRemoveEditImage}
+                                        style={styles.removeImageButton}
+                                    >
+                                        <Text style={styles.removeImageText}>
+                                            Remove image
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            )}
+
+                            <Pressable
+                                onPress={selectEditImage}
+                                style={styles.changeImageButton}
+                            >
+                                <Text style={styles.changeImageText}>
+                                    {editImagePreview
+                                        ? 'Change image'
+                                        : 'Add image'}
+                                </Text>
+                            </Pressable>
+                        </ScrollView>
+
+                        <View style={styles.editFooter}>
+                            <Pressable
+                                onPress={() => setShowEditModal(false)}
+                                disabled={savingEdit}
+                                style={styles.cancelEditButton}
+                            >
+                                <Text style={styles.cancelEditText}>
+                                    Cancel
+                                </Text>
+                            </Pressable>
+
+                            <ShineButton
+                                onPress={handleSaveEdit}
+                                disabled={savingEdit}
+                                style={[
+                                    styles.saveEditButton,
+                                    savingEdit && styles.sendButtonDisabled,
+                                ]}
+                            >
+                                {savingEdit ? (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color={Colors.surface}
+                                    />
+                                ) : (
+                                    <Text style={styles.saveEditText}>
+                                        Save Changes
+                                    </Text>
+                                )}
+                            </ShineButton>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Full-screen image viewer modal */}
             <Modal
@@ -1015,5 +1308,136 @@ const styles = StyleSheet.create({
     reactionUserEmoji: {
         fontSize: 20,
         marginRight: Spacing.sm,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: Spacing.sm,
+    },
+    ownerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.xs,
+    },
+    ownerActionButton: {
+        paddingHorizontal: Spacing.sm,
+        paddingVertical: Spacing.xs,
+    },
+    editActionText: {
+        fontFamily: Fonts.bold,
+        fontSize: 11,
+        color: Colors.primary,
+    },
+    deleteActionText: {
+        fontFamily: Fonts.bold,
+        fontSize: 11,
+        color: Colors.danger,
+    },
+    editOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: Spacing.md,
+    },
+    editModal: {
+        width: '100%',
+        maxWidth: 520,
+        maxHeight: '85%',
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.large,
+        overflow: 'hidden',
+    },
+    editHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: Spacing.md,
+    },
+    editTitle: {
+        fontFamily: Fonts.bold,
+        fontSize: 16,
+        color: Colors.text,
+    },
+    editContent: {
+        padding: Spacing.md,
+    },
+    editTextInput: {
+        minHeight: 120,
+        textAlignVertical: 'top',
+        backgroundColor: Colors.background,
+        borderRadius: Radius.medium,
+        padding: Spacing.md,
+        fontFamily: Fonts.regular,
+        fontSize: 14,
+        lineHeight: 22,
+        color: Colors.text,
+        outlineStyle: 'none',
+    } as any,
+    editImageContainer: {
+        marginTop: Spacing.md,
+        alignItems: 'center',
+    },
+    editImage: {
+        width: '100%',
+        height: 220,
+        borderRadius: Radius.medium,
+        backgroundColor: Colors.background,
+    },
+    removeImageButton: {
+        alignSelf: 'flex-end',
+        paddingVertical: Spacing.sm,
+    },
+    removeImageText: {
+        fontFamily: Fonts.bold,
+        fontSize: 12,
+        color: Colors.danger,
+    },
+    changeImageButton: {
+        marginTop: Spacing.md,
+        padding: Spacing.md,
+        borderRadius: Radius.medium,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        alignItems: 'center',
+    },
+    changeImageText: {
+        fontFamily: Fonts.bold,
+        fontSize: 12,
+        color: Colors.primary,
+    },
+    editFooter: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: Spacing.sm,
+        padding: Spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: Colors.border,
+    },
+    cancelEditButton: {
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.sm,
+    },
+    cancelEditText: {
+        fontFamily: Fonts.bold,
+        fontSize: 12,
+        color: Colors.textSecondary,
+    },
+    saveEditButton: {
+        minHeight: 38,
+        minWidth: 115,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.sm,
+        borderRadius: Radius.medium,
+        backgroundColor: Colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    saveEditText: {
+        fontFamily: Fonts.bold,
+        fontSize: 12,
+        color: Colors.surface,
     },
 });
