@@ -179,7 +179,7 @@ export default function HomeScreen({ user, onLogout }: Props) {
                 }}
                 style={
                     mobile
-                        ? styles.mobileNavItem
+                        ? [styles.mobileNavItem, isActive && styles.mobileNavItemActive]
                         : [
                             styles.navItem,
                             isActive && styles.navItemActive,
@@ -242,13 +242,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         </View>
 
                         <View style={styles.account}>
-                            <Pressable
-                                onPress={() => {
-                                    setActivePage('Profile');
-                                    setViewingProfileId(null);
-                                    setViewingPostId(null);
-                                }}
-                            >
+                            <Pressable onPress={() => {
+                                setActivePage('Profile');
+                                setViewingProfileId(null);
+                                setViewingPostId(null);
+                            }}>
                                 <Avatar
                                     name={displayUserName}
                                     url={displayPhotoURL}
@@ -321,13 +319,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             </Pressable>
                         )}
 
-                        <Pressable
-                            onPress={() => {
-                                setActivePage('Profile');
-                                setViewingProfileId(null);
-                                setViewingPostId(null);
-                            }}
-                        >
+                        <Pressable onPress={() => {
+                            setActivePage('Profile');
+                            setViewingProfileId(null);
+                            setViewingPostId(null);
+                        }}>
                             <Avatar
                                 name={displayUserName}
                                 url={displayPhotoURL}
@@ -910,6 +906,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 3,
+        paddingVertical: 6,
+        borderRadius: Radius.medium,
+    },
+    mobileNavItemActive: {
+        backgroundColor: Colors.accent,
     },
     mobileNavIcon: {
         fontFamily: Fonts.bold,
