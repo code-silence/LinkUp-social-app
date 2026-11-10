@@ -305,6 +305,7 @@ export default function LoginScreen({
 
     return (
         <ScrollView
+            style={{ flex: 1 }}
             contentContainerStyle={[
                 styles.container,
                 isWide && styles.desktopContainer,
@@ -578,12 +579,13 @@ export default function LoginScreen({
 const styles = StyleSheet.create({
     container: {
         flexGrow: 1,
+        minHeight: '100vh',
         backgroundColor: Colors.background,
     },
 
     desktopContainer: {
         flexDirection: 'row',
-        minHeight: '100%',
+        minHeight: '100vh',
     },
 
     // BRANDING
