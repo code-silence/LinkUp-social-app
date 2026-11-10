@@ -277,6 +277,7 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
 
     return (
         <ScrollView
+            style={{ flex: 1 }}
             contentContainerStyle={[
                 styles.container,
                 isDesktop && styles.desktopContainer,
@@ -572,12 +573,13 @@ export default function SignupScreen({ onNavigateLogin }: Props) {
 const styles = StyleSheet.create({
     container: {
         flexGrow: 1,
+        minHeight: '100vh',
         backgroundColor: Colors.background,
     },
 
     desktopContainer: {
         flexDirection: 'row',
-        minHeight: '100%',
+        minHeight: '100vh',
     },
 
     // BRANDING

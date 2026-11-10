@@ -23,7 +23,6 @@ import {
     sendFriendRequest,
     acceptFriendRequest,
     removeConnection,
-    ConnectionStatus,
 } from '../services/friends';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
 
@@ -95,12 +94,13 @@ export default function FriendsScreen({
         setLoading(true);
 
         try {
-            // Always fetch friend requests count/list so the badge is updated
+            // Always fetch pending friend requests count/list
             const pendingRequests = await getUsersByConnectionStatus(user.uid, 'pending_received');
             setRequests(pendingRequests);
 
             if (activeTab === 'Suggestions') {
-                const data = await getSuggestions(user.uid);
+                // Fetch suggestions based on search query (shows mutual friends by default, all on search)
+                const data = await getSuggestions(user.uid, searchQuery);
                 setSuggestions(data);
             } else if (activeTab === 'Sent Requests') {
                 const data = await getUsersByConnectionStatus(user.uid, 'pending_sent');
@@ -118,7 +118,7 @@ export default function FriendsScreen({
         } finally {
             setLoading(false);
         }
-    }, [activeTab, user.uid]);
+    }, [activeTab, user.uid, searchQuery]);
 
     useEffect(() => {
         loadData();
@@ -351,7 +351,7 @@ export default function FriendsScreen({
                             ? 'Wants to connect with you'
                             : activeTab === 'Sent Requests'
                                 ? 'Request pending'
-                                : 'Suggested for you'}
+                                : 'Mutual friend connection'}
                     </Text>
 
                     <View style={styles.cardActions}>
@@ -433,13 +433,15 @@ export default function FriendsScreen({
     const getEmptyMessage = () => {
         switch (activeTab) {
             case 'Suggestions':
-                return 'No new suggestions right now.';
+                return searchQuery.trim()
+                    ? 'No matching users found.'
+                    : 'No mutual friend suggestions right now.';
             case 'Friend Requests':
                 return 'You have no pending friend requests.';
             case 'Sent Requests':
-                return 'Hmm..looks like you haven\'t sent any friend requests yet.';
+                return 'You have no sent requests.';
             case 'Your Friends':
-                return "Opps.. It's quiet here.";
+                return "You haven't added any friends yet.";
         }
     };
 
@@ -582,7 +584,7 @@ export default function FriendsScreen({
                             <Text style={styles.headerTitle}>{activeTab}</Text>
                             <Text style={styles.headerSubtitle}>
                                 {activeTab === 'Suggestions'
-                                    ? 'Discover people on LinkUp.'
+                                    ? 'People with mutual friends.'
                                     : 'Manage your connections.'}
                             </Text>
                         </View>
@@ -646,9 +648,7 @@ export default function FriendsScreen({
                         </View>
 
                         <Text style={styles.emptyText}>
-                            {searchQuery.trim()
-                                ? 'No matching people found.'
-                                : getEmptyMessage()}
+                            {getEmptyMessage()}
                         </Text>
 
                         {activeTab === 'Your Friends' && (
@@ -1042,6 +1042,7 @@ const styles = StyleSheet.create({
         borderRadius: Radius.round,
         backgroundColor: Colors.accent,
         alignItems: 'center',
+        zIndex: 1,
         justifyContent: 'center',
         marginBottom: Spacing.md,
     },
