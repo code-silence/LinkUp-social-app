@@ -17,6 +17,7 @@ import {
 import { User } from 'firebase/auth';
 import { UserProfile, getUserProfile } from '../services/user';
 import ShineButton from '../components/ShineButton';
+import { getOrCreateChat } from '../services/chat';
 import {
     getSuggestions,
     getUsersByConnectionStatus,
@@ -29,6 +30,7 @@ import { Colors, Fonts, Radius, Spacing } from '../theme';
 interface FriendsScreenProps {
     user: User;
     onViewProfile: (userId: string) => void;
+    onStartChat: (friend: UserProfile) => void;
 }
 
 type TabType =
@@ -47,6 +49,7 @@ const TABS: TabType[] = [
 export default function FriendsScreen({
     user,
     onViewProfile,
+    onStartChat,
 }: FriendsScreenProps) {
     const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
@@ -257,7 +260,13 @@ export default function FriendsScreen({
         const displayName = getDisplayName(profile);
 
         return (
-            <View key={profile.uid} style={styles.listItem}>
+            <View
+                key={profile.uid}
+                style={[
+                    styles.listItem,
+                    width < 600 && styles.listItemMobile,
+                ]}
+            >
                 <Pressable
                     style={styles.listLeft}
                     onPress={() => onViewProfile(profile.uid)}
@@ -279,6 +288,15 @@ export default function FriendsScreen({
                 </Pressable>
 
                 <View style={styles.listActions}>
+                    <Pressable
+                        style={styles.primaryButton}
+                        onPress={() => onStartChat(profile)}
+                    >
+                        <Text style={styles.primaryButtonText}>
+                            Message
+                        </Text>
+                    </Pressable>
+
                     <Pressable
                         style={[
                             styles.secondaryButton,
@@ -883,16 +901,35 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: Colors.border,
         padding: Spacing.md,
+        gap: Spacing.md,
     },
+
+    listItemMobile: {
+        flexDirection: 'column',
+        alignItems: 'stretch',
+    },
+
     listLeft: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: Spacing.md,
         flex: 1,
+        minWidth: 0,
     },
+
     listTextContainer: {
         flex: 1,
+        minWidth: 0,
     },
+
+    listActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: Spacing.sm,
+        flexShrink: 0,
+    },
+
     listName: {
         fontFamily: Fonts.bold,
         fontSize: 15,
@@ -910,11 +947,7 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         marginTop: 3,
     },
-    listActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.sm,
-    },
+
     card: {
         backgroundColor: Colors.surface,
         borderRadius: Radius.large,

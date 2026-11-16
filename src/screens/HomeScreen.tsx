@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import {
+import React, { useState, useEffect, useRef } from 'react'; import {
     View,
     Text,
     Pressable,
@@ -30,6 +29,10 @@ import FriendsScreen from './FriendsScreen';
 import NotificationsScreen from './NotificationsScreen';
 import PublicProfileScreen from './PublicProfileScreen';
 import CreatePostScreen from './CreatePostScreen';
+import { MessageCircle } from 'lucide-react-native';
+
+import ChatScreen from './ChatScreen';
+import ConversationScreen from './ConversationScreen';
 
 import { User } from 'firebase/auth';
 import { Colors, Fonts, Radius, Spacing } from '../theme';
@@ -39,7 +42,11 @@ import { subscribeToNotifications } from '../services/notifications';
 import { subscribeToPendingFriendRequests } from '../services/friends';
 import PostCard from '../components/PostCard';
 import logo from '../assets/logo.png';
-
+import {
+    getOrCreateChat,
+    getOtherParticipantId,
+    subscribeToChats,
+} from '../services/chat';
 interface Props {
     user: User;
     onLogout: () => void;
@@ -48,6 +55,7 @@ interface Props {
 const navigation = [
     { label: 'Home', Icon: House },
     { label: 'Friends', Icon: Users },
+    { label: 'Messages', Icon: MessageCircle },
     { label: 'Create Post', Icon: SquarePlus },
     { label: 'Notifications', Icon: Bell },
     { label: 'Profile', Icon: UserRound },
@@ -164,13 +172,22 @@ function AnimatedBrandText() {
 
 export default function HomeScreen({ user, onLogout }: Props) {
     const { width, height } = useWindowDimensions();
-    type ActivePage = 'Home' | 'Profile' | 'Friends' | 'Create Post' | 'Notifications' | 'SinglePost';
-
+    type ActivePage =
+        | 'Home'
+        | 'Profile'
+        | 'Friends'
+        | 'Messages'
+        | 'Create Post'
+        | 'Notifications'
+        | 'SinglePost';
     const [activePage, setActivePage] = useState<ActivePage>('Home');
     const [globalProfile, setGlobalProfile] = useState<UserProfile | null>(null);
     const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
     const [viewingPostId, setViewingPostId] = useState<string | null>(null);
+    const [activeChatId, setActiveChatId] = useState<string | null>(null);
+    const [activeChatUser, setActiveChatUser] = useState<UserProfile | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [unreadMessageCount, setUnreadMessageCount] = useState(0);
     const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false);
 
     // State for top-right profile popup menu
@@ -183,6 +200,11 @@ export default function HomeScreen({ user, onLogout }: Props) {
     const [feedLoading, setFeedLoading] = useState(true);
     const [feedError, setFeedError] = useState('');
     const emailPrefix = user.email ? user.email.split('@')[0] : 'User';
+
+    const [routeReady, setRouteReady] = useState(false);
+    const [isRestoringChat, setIsRestoringChat] = useState(false);
+
+    const routeRestoreId = useRef(0);
 
     const currentUser: PostAuthor = {
         uid: user.uid,
@@ -223,6 +245,27 @@ export default function HomeScreen({ user, onLogout }: Props) {
         return () => unsubscribe();
     }, [user.uid]);
 
+    // Subscribe to unread messages count in real time
+    useEffect(() => {
+        const unsubscribe = subscribeToChats(
+            user.uid,
+            chats => {
+                const totalUnread = chats.reduce(
+                    (total, chat) =>
+                        total + (chat.unreadCounts?.[user.uid] || 0),
+                    0,
+                );
+
+                setUnreadMessageCount(totalUnread);
+            },
+            error => {
+                console.error('Unread messages subscription error:', error);
+            },
+        );
+
+        return () => unsubscribe();
+    }, [user.uid]);
+
     // Subscribe to pending friend requests in real time
     useEffect(() => {
         const unsubscribe = subscribeToPendingFriendRequests(
@@ -249,6 +292,178 @@ export default function HomeScreen({ user, onLogout }: Props) {
         };
         fetchGlobalProfile();
     }, [user.uid]);
+
+
+    // Restore the screen from the browser URL
+    useEffect(() => {
+        if (Platform.OS !== 'web') {
+            setRouteReady(true);
+            return;
+        }
+
+        const restoreRoute = async (pathname: string) => {
+            const restoreId = ++routeRestoreId.current;
+
+            let segments: string[];
+
+            try {
+                segments = pathname
+                    .split('/')
+                    .filter(Boolean)
+                    .map(segment => decodeURIComponent(segment));
+            } catch {
+                segments = [];
+            }
+
+            setViewingProfileId(null);
+            setViewingPostId(null);
+            setActiveChatId(null);
+            setActiveChatUser(null);
+            setIsRestoringChat(false);
+            setProfileMenuVisible(false);
+
+            const [section, id] = segments;
+
+            switch (section) {
+                case 'friends':
+                    setActivePage('Friends');
+                    break;
+
+                case 'messages':
+                    setActivePage('Messages');
+
+                    if (id) {
+                        setActiveChatId(id);
+                        setIsRestoringChat(true);
+
+                        // Allow URL synchronization before fetching the profile.
+                        setRouteReady(true);
+
+                        try {
+                            const otherUserId = await getOtherParticipantId(
+                                id,
+                                user.uid,
+                            );
+
+                            if (!otherUserId) {
+                                throw new Error('Conversation not found.');
+                            }
+
+                            const profile = await getUserProfile(otherUserId);
+
+                            if (!profile) {
+                                throw new Error('User profile not found.');
+                            }
+
+                            if (restoreId !== routeRestoreId.current) {
+                                return;
+                            }
+
+                            setActiveChatUser(profile as UserProfile);
+                        } catch (error) {
+                            console.error('Could not restore conversation:', error);
+
+                            if (restoreId === routeRestoreId.current) {
+                                setActiveChatId(null);
+                                setActiveChatUser(null);
+                                window.history.replaceState({}, '', '/messages');
+                            }
+                        } finally {
+                            if (restoreId === routeRestoreId.current) {
+                                setIsRestoringChat(false);
+                            }
+                        }
+                    }
+                    break;
+
+                case 'create-post':
+                    setActivePage('Create Post');
+                    break;
+
+                case 'notifications':
+                    setActivePage('Notifications');
+                    break;
+
+                case 'profile':
+                    if (id) {
+                        setViewingProfileId(id);
+                    } else {
+                        setActivePage('Profile');
+                    }
+                    break;
+
+                case 'post':
+                    if (id) {
+                        setActivePage('Notifications');
+                        setViewingPostId(id);
+                    } else {
+                        setActivePage('Home');
+                    }
+                    break;
+
+                default:
+                    setActivePage('Home');
+
+                    if (pathname !== '/') {
+                        window.history.replaceState({}, '', '/');
+                    }
+                    break;
+            }
+
+            setRouteReady(true);
+        };
+
+        const handlePopState = () => {
+            restoreRoute(window.location.pathname);
+        };
+
+        restoreRoute(window.location.pathname);
+
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            routeRestoreId.current++;
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, [user.uid]);
+
+    // Keep the browser URL synchronized with navigation state
+    useEffect(() => {
+        if (Platform.OS !== 'web' || !routeReady) {
+            return;
+        }
+
+        let nextPath = '/';
+
+        if (viewingPostId) {
+            nextPath = `/post/${encodeURIComponent(viewingPostId)}`;
+        } else if (viewingProfileId) {
+            nextPath = `/profile/${encodeURIComponent(viewingProfileId)}`;
+        } else if (activePage === 'Profile') {
+            nextPath = '/profile';
+        } else if (activePage === 'Friends') {
+            nextPath = '/friends';
+        } else if (activePage === 'Messages') {
+            nextPath = activeChatId
+                ? `/messages/${encodeURIComponent(activeChatId)}`
+                : '/messages';
+        } else if (activePage === 'Create Post') {
+            nextPath = '/create-post';
+        } else if (activePage === 'Notifications') {
+            nextPath = '/notifications';
+        }
+
+        if (window.location.pathname !== nextPath) {
+            window.history.pushState({}, '', nextPath);
+        }
+    }, [
+        routeReady,
+        activePage,
+        viewingProfileId,
+        viewingPostId,
+        activeChatId,
+    ]);
+
 
     const displayUserName = globalProfile?.name || user.displayName || emailPrefix;
     const displayFirstName = displayUserName.split(' ')[0];
@@ -293,6 +508,8 @@ export default function HomeScreen({ user, onLogout }: Props) {
                     setActivePage(item.label as ActivePage);
                     setViewingProfileId(null);
                     setViewingPostId(null);
+                    setActiveChatId(null);
+                    setActiveChatUser(null);
                 }}
                 style={
                     mobile
@@ -316,6 +533,9 @@ export default function HomeScreen({ user, onLogout }: Props) {
                     )}
 
                     {item.label === 'Friends' && hasPendingFriendRequests && (
+                        <View style={styles.dotBadgeContainer} />
+                    )}
+                    {item.label === 'Messages' && unreadMessageCount > 0 && (
                         <View style={styles.dotBadgeContainer} />
                     )}
                 </View>
@@ -501,6 +721,40 @@ export default function HomeScreen({ user, onLogout }: Props) {
                             )}
                         </View>
                     </ScrollView>
+                ) : activePage === 'Messages' ? (
+                    isRestoringChat ? (
+                        <View
+                            style={{
+                                flex: 1,
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                            }}
+                        >
+                            <ActivityIndicator
+                                size="large"
+                                color={Colors.primary}
+                            />
+                        </View>
+                    ) : activeChatId && activeChatUser ? (
+                        <ConversationScreen
+                            user={user}
+                            chatId={activeChatId}
+                            otherUser={activeChatUser}
+                            onBack={() => {
+                                setActiveChatId(null);
+                                setActiveChatUser(null);
+                            }}
+                        />
+                    ) : (
+                        <ChatScreen
+                            user={user}
+                            onOpenConversation={(chatId, otherUser) => {
+                                setActiveChatId(chatId);
+                                setActiveChatUser(otherUser);
+                            }}
+                        />
+                    )
+
                 ) : activePage === 'Profile' ? (
                     <ProfileScreen
                         user={user}
@@ -513,6 +767,19 @@ export default function HomeScreen({ user, onLogout }: Props) {
                         user={user}
                         onViewProfile={userId => {
                             setViewingProfileId(userId);
+                        }}
+                        onStartChat={async (friend) => {
+                            try {
+                                const chatId = await getOrCreateChat(user.uid, friend.uid);
+
+                                setActiveChatId(chatId);
+                                setActiveChatUser(friend);
+                                setActivePage('Messages');
+                                setViewingProfileId(null);
+                                setViewingPostId(null);
+                            } catch (error) {
+                                console.error('Could not start conversation:', error);
+                            }
                         }}
                     />
                 ) : activePage === 'Notifications' ? (
