@@ -1,11 +1,9 @@
 # LinkUp — Social Media Platform
+# **Live Website:** [https://linkup-social-app.stellar-dev.workers.dev/](https://linkup-social-app.stellar-dev.workers.dev/)
 
 **Your world, closer together.**
 
 LinkUp is a social media web application built with React Native and Firebase. It provides a place to connect with friends, share posts, interact with your community, and chat in real time.
-
-# **Live Website:** [https://linkup-social-app.stellar-dev.workers.dev/](https://linkup-social-app.stellar-dev.workers.dev/)
-
 ---
 
 ## Features
